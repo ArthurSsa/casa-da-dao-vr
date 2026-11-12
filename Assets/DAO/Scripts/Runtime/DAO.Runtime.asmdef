@@ -1,0 +1,28 @@
+{
+    "name": "DAO.Runtime",
+    "rootNamespace": "DAO",
+    "references": [
+        "Unity.InputSystem",
+        "Oculus.Interaction"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "DAO_HAS_INPUTSYSTEM"
+        },
+        {
+            "name": "com.meta.xr.sdk.interaction",
+            "expression": "1.0.0",
+            "define": "DAO_HAS_META"
+        }
+    ],
+    "noEngineReferences": false
+}

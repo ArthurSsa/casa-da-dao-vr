@@ -1,0 +1,14 @@
+# Texto com fim de linha normalizado
+* text=auto
+
+# Binários (sem diff nem conversão de fim de linha)
+*.glb binary
+*.fbx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.unitypackage binary
+*.apk binary

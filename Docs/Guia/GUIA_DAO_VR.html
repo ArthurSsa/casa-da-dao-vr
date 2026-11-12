@@ -1,0 +1,451 @@
+<title>Casa da DAO</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: guia de equipe, coluna de leitura com índice fixo à esquerda no desktop; tabelas e cards só onde agrupam informação. */
+:root {
+  --bg: #f5f7f6;
+  --surface: #ffffff;
+  --fg: #15201c;
+  --muted: #56675f;
+  --line: #d9e2de;
+  --accent: #0f7a57;
+  --accent-soft: #e0f2ea;
+  --warn: #a8550a;
+  --warn-soft: #fbeedd;
+  --bad: #b42335;
+  --bad-soft: #fbe5e8;
+  --code-bg: #edf2f0;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412; --surface: #151d1a; --fg: #e5eeea; --muted: #9bb0a7; --line: #26332e;
+    --accent: #4fd1a1; --accent-soft: #143a2d; --warn: #f2a65a; --warn-soft: #3a2814;
+    --bad: #f07c8b; --bad-soft: #3d1a20; --code-bg: #1a2521; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412; --surface: #151d1a; --fg: #e5eeea; --muted: #9bb0a7; --line: #26332e;
+  --accent: #4fd1a1; --accent-soft: #143a2d; --warn: #f2a65a; --warn-soft: #3a2814;
+  --bad: #f07c8b; --bad-soft: #3d1a20; --code-bg: #1a2521; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; padding-top: 40px; font-size: 14px; }
+nav.toc p { font-family: var(--display); font-weight: 600; margin: 0 0 8px; letter-spacing: .06em; text-transform: uppercase; font-size: 12px; color: var(--muted); }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 4px 8px; border-radius: 6px; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); background: var(--accent-soft); outline: none; }
+main { min-width: 0; max-width: 780px; }
+header.top { padding-block: 40px 8px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 8px; }
+h1 { font-family: var(--display); font-size: clamp(36px, 6vw, 52px); line-height: 1.05; margin: 0 0 12px; letter-spacing: -0.02em; text-wrap: balance; }
+.lede { font-size: 18px; color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+h2 { font-family: var(--display); font-size: 26px; line-height: 1.2; margin: 56px 0 12px; text-wrap: balance; scroll-margin-top: 24px; }
+h3 { font-family: var(--display); font-size: 19px; margin: 28px 0 8px; }
+p { margin: 0 0 14px; max-width: 68ch; }
+a { color: var(--accent); }
+code, kbd { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 6px; border-radius: 4px; }
+kbd { border: 1px solid var(--line); }
+pre { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 0 0 16px; line-height: 1.5; }
+ul, ol { padding-left: 22px; margin: 0 0 16px; }
+li { margin-bottom: 6px; max-width: 68ch; }
+.status { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 8px 0 8px; }
+.status div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; line-height: 1.35; }
+.status b { display: block; font-family: var(--display); font-size: 15px; margin-bottom: 4px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .02em; padding: 2px 9px; border-radius: 999px; white-space: nowrap; line-height: 1.6; }
+.ok { background: var(--accent-soft); color: var(--accent); }
+.todo { background: var(--warn-soft); color: var(--warn); }
+.no { background: var(--bad-soft); color: var(--bad); }
+.table-wrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.45; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--display); font-weight: 600; font-size: 13px; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 8px 0 20px; counter-reset: step; }
+.flow div { border-top: 3px solid var(--accent); padding: 10px 2px 0; font-size: 14px; line-height: 1.4; }
+.flow div::before { counter-increment: step; content: counter(step); font-family: var(--display); font-weight: 700; color: var(--accent); margin-right: 6px; }
+.flow b { font-family: var(--display); }
+.loop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 20px; font-size: 14px; }
+.loop span.room { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-family: var(--display); font-weight: 600; }
+.loop span.via { color: var(--accent); font-size: 13px; }
+.room { display: grid; grid-template-columns: minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin: 0 0 22px; }
+.room .shots { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); border-bottom: 1px solid var(--line); }
+.room img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.room .shots img + img { border-left: 1px solid var(--line); }
+.room .body { padding: 16px 18px 6px; }
+.room h3 { margin-top: 0; }
+.specs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; margin: 0 0 14px; font-size: 13px; }
+.specs span { color: var(--muted); display: block; font-size: 12px; }
+.specs strong { font-variant-numeric: tabular-nums; font-weight: 600; }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 0 0 16px; font-size: 15px; }
+.note p:last-child { margin-bottom: 0; }
+.people { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.people > div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 14px; min-width: 0; }
+.people h3 { margin: 0 0 6px; font-size: 16px; }
+.people ul { padding-left: 18px; margin: 0; }
+.days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+.days > div { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--surface); font-size: 14px; min-width: 0; }
+.days h3 { margin: 0 0 8px; font-size: 16px; display: flex; justify-content: space-between; gap: 8px; }
+.days h3 small { font-family: var(--body); font-weight: 500; color: var(--muted); font-size: 12px; }
+.days ul { padding-left: 18px; margin: 0 0 10px; }
+.deliver { font-size: 13px; background: var(--accent-soft); color: var(--fg); padding: 8px 10px; border-radius: 6px; }
+.deliver b { color: var(--accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; display: block; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.two > div { min-width: 0; }
+.steps > li { margin-bottom: 14px; }
+.steps > li::marker { font-family: var(--display); font-weight: 700; color: var(--accent); }
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+@media (max-width: 960px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  nav.toc { display: none; }
+}
+@media (max-width: 640px) {
+  .status, .flow, .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .people, .days, .two, .room .shots { grid-template-columns: minmax(0, 1fr); }
+  .room .shots img + img { border-left: 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Índice">
+    <p>Neste guia</p>
+    <ol>
+      <li><a href="#ideia">A ideia</a></li>
+      <li><a href="#projeto">O projeto pronto</a></li>
+      <li><a href="#salas">As 3 salas e as portas</a></li>
+      <li><a href="#web3">Ideias de Web 3.0</a></li>
+      <li><a href="#quest">Rodar no Quest</a></li>
+      <li><a href="#equipe">Quem faz o quê</a></li>
+      <li><a href="#conforto">Conforto e desempenho</a></li>
+      <li><a href="#riscos">Riscos e plano B</a></li>
+      <li><a href="#apresentacao">Apresentação</a></li>
+      <li><a href="#referencia">Referência do kit</a></li>
+      <li><a href="#creditos">Créditos</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="top">
+      <p class="eyebrow">Hackathon Web 3.0 em VR · Desafio 05 (DAO), ampliado · Meta Quest 2 e 3</p>
+      <h1>Casa da DAO</h1>
+      <p class="lede">Três cômodos de uma casa antiga, ligados pelas próprias portas e escadas. Em cada um, o visitante vota numa proposta e a casa obedece: ele encolhe, a cozinha perde a gravidade, o sótão muda de clima. Ninguém manda na casa, só os votos.</p>
+      <div class="status">
+        <div><b>Projeto Quest</b><span class="pill ok">pronto</span><br>Unity 6.3 + Meta XR SDK v209 + URP</div>
+        <div><b>Portais</b><span class="pill ok">nas portas reais</span><br>Porta, arco e escada com luz</div>
+        <div><b>Teste automático</b><span class="pill ok">passou</span><br>Ciclo completo das 3 salas</div>
+        <div><b>No headset</b><span class="pill todo">testar</span><br>Instalar o APK e conferir conforto</div>
+      </div>
+    </header>
+
+    <section id="ideia">
+      <h2>A ideia</h2>
+      <p>O Desafio 05 do PDF pede: o visitante aperta A ou B e a sala muda de cor. A equipe expandiu isso para <strong>três salas</strong>, cada uma com uma proposta. A estrutura do PDF continua valendo em cada sala:</p>
+      <div class="flow">
+        <div><b>Painel</b><br>explica a proposta em até 3 frases</div>
+        <div><b>Ação</b><br>Poke no botão A ou B</div>
+        <div><b>Resultado</b><br>membros votam, a casa executa</div>
+        <div><b>Conclusão</b><br>3 propostas executadas = “Desafio concluído”</div>
+      </div>
+      <p>Cada sala tem uma saída real. Ficar parado na luz em frente a ela por cerca de 1 segundo leva à próxima sala:</p>
+      <div class="loop" aria-label="Ordem das salas">
+        <span class="room">Sala de Estar</span><span class="via">porta →</span>
+        <span class="room">Cozinha</span><span class="via">arco →</span>
+        <span class="room">Sótão</span><span class="via">escada desce →</span>
+        <span class="room">Sala de Estar</span>
+      </div>
+      <p>A metáfora que a banca precisa ouvir (25% da nota): <strong>a regra está no “contrato”, não numa pessoa</strong>. O visitante não pede para ficar minúsculo; ele vota, a contagem é pública no livro-razão e a decisão se executa sozinha.</p>
+    </section>
+
+    <section id="projeto">
+      <h2>O projeto pronto</h2>
+      <p>A pasta <code>DAO\CasaDaDAO_Quest</code> é um projeto Unity 6000.3.9f1 já configurado para o Quest. Abram pelo Unity Hub (Add &gt; Add project from disk).</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Item</th><th>Situação</th><th>Detalhe</th></tr></thead>
+        <tbody>
+          <tr><td>Meta XR SDK</td><td><span class="pill ok">instalado</span></td><td>Core + Interaction SDK v209 (<code>com.meta.xr.sdk.core</code>, <code>com.meta.xr.sdk.interaction.ovr</code>)</td></tr>
+          <tr><td>Rig do jogador</td><td><span class="pill ok">pronto</span></td><td><code>OVRCameraRig</code> (tracking a partir do chão) + <code>OVRComprehensiveInteractionRig</code>: mãos, controles, Poke, Grab, Ray, teleporte e giro da Meta</td></tr>
+          <tr><td>Botões de voto</td><td><span class="pill ok">Poke da Meta</span></td><td>Template oficial de Poke (afunda ao tocar) → <code>InteractableUnityEventWrapper.WhenSelect</code> → <code>DaoButton.Press</code></td></tr>
+          <tr><td>Teleporte</td><td><span class="pill ok">pelo locomotor</span></td><td>Evento de teleporte absoluto do <code>FirstPersonLocomotor</code>, o mesmo usado pelo teleporte nativo da Meta</td></tr>
+          <tr><td>Plataforma</td><td><span class="pill ok">Android</span></td><td>IL2CPP, ARM64, API 32+, Vulkan, Linear, ASTC; XR Plug-in Management com <strong>OpenXR + Meta XR Feature</strong> (recomendação da Meta para Unity 6) no Android e no PC (Link); perfis dos controles Touch, Touch Plus e Touch Pro; ajustes do Meta Project Setup Tool aplicados</td></tr>
+          <tr><td>Renderização</td><td><span class="pill ok">URP</span></td><td>MSAA 4x, sem HDR, sem sombras em tempo real; Quest 2, 3 e 3S; controles e mãos</td></tr>
+          <tr><td>Meta Horizon Link e Developer Hub</td><td><span class="pill no">instalar</span></td><td>Baixar no site da Meta (pedem login). Developer Hub instala o APK, espelha a tela e grava o vídeo de backup.</td></tr>
+          <tr><td>Modo desenvolvedor no Quest</td><td><span class="pill todo">conferir</span></td><td>App Meta Horizon no celular &gt; Dispositivos &gt; Modo de desenvolvedor</td></tr>
+        </tbody>
+      </table></div>
+      <p>Menus que o kit adiciona no Unity: <code>DAO &gt; Configurar projeto para Quest (Meta XR)</code>, <code>DAO &gt; Montar cena das 3 salas</code> e <code>DAO &gt; Gerar APK para o Quest</code>. Rodar de novo o “Montar cena” recria tudo do zero, então façam ajustes manuais <em>depois</em> da última geração ou anotem para refazer.</p>
+    </section>
+
+    <section id="salas">
+      <h2>As 3 salas e as portas</h2>
+      <p>À esquerda, a vista a partir do spawn (escolhido sozinho no trecho de piso mais livre). À direita, o portal na saída real da sala.</p>
+
+      <article class="room">
+        <div class="shots">
+          <img src="img/sala-de-estar.jpg" alt="Sala de estar com estação de votação, sofás, piano e relógio" width="1200" height="750">
+          <img src="img/portal-sala.jpg" alt="Portal de luz verde em frente à porta de madeira entalhada" width="800" height="500">
+        </div>
+        <div class="body">
+          <h3>1 · Sala de Estar · proposta “Tamanho” · sai pela porta</h3>
+          <div class="specs">
+            <div><span>Tamanho</span><strong>7,2 × 7,1 m</strong></div>
+            <div><span>Pé-direito</span><strong>3,9 m</strong></div>
+            <div><span>Triângulos</span><strong>135 mil</strong></div>
+            <div><span>Saída</span><strong>porta entalhada</strong></div>
+          </div>
+          <p><strong>Votação:</strong> A = <em>Minúsculo</em> (escala 0,15, olhos a ~24 cm do chão) · B = <em>Gigante</em> (escala 2,2, limitada pelo teto).</p>
+          <p><strong>Ideia extra:</strong> esconder um token embaixo do sofá ou do piano, que só dá para ver e pegar minúsculo.</p>
+          <p><strong>Corrigido:</strong> modelo em polegadas (escala 0,0254), sem teto (adicionado) e com dois lados sem parede (fechados com parede de madeira). Malhas de contorno do SketchUp não recebem collider.</p>
+        </div>
+      </article>
+
+      <article class="room">
+        <div class="shots">
+          <img src="img/cozinha.jpg" alt="Cozinha cartoon com mesa, cadeiras, fogão e estação de votação" width="1200" height="750">
+          <img src="img/portal-cozinha.jpg" alt="Portal de luz verde dentro do arco da cozinha" width="800" height="500">
+        </div>
+        <div class="body">
+          <h3>2 · Cozinha · proposta “Física” · sai pelo arco</h3>
+          <div class="specs">
+            <div><span>Tamanho</span><strong>7,8 × 8,1 m</strong></div>
+            <div><span>Pé-direito</span><strong>3,3 m</strong></div>
+            <div><span>Triângulos</span><strong>13,7 mil</strong></div>
+            <div><span>Saída</span><strong>arco de 2,9 m</strong></div>
+          </div>
+          <p><strong>Votação:</strong> A = <em>Gravidade zero</em> (panelas, pratos e cadeiras flutuam) · B = <em>Gravidade lunar</em>. Só os objetos flutuam; o jogador continua no chão.</p>
+          <p><strong>Ideia extra:</strong> pegar (Grab) um prato flutuando e encaixar (Snap) na mesa.</p>
+          <p><strong>Corrigido:</strong> os 34 móveis vinham <strong>20 m acima do piso</strong> (baixados); texturas renomeadas para o Unity achar (92 de 100); teto invisível por dentro (adicionado); um lado sem parede (fechado). O arco foi achado por raycast: é o único vão com parede em cima.</p>
+        </div>
+      </article>
+
+      <article class="room">
+        <div class="shots">
+          <img src="img/sotao.jpg" alt="Sótão de madeira com sofá, prateleiras e estação de votação" width="1200" height="750">
+          <img src="img/portal-sotao.jpg" alt="Portal de luz no topo da escada do sótão, entre prateleiras e bicicletas" width="800" height="500">
+        </div>
+        <div class="body">
+          <h3>3 · Sótão · proposta “Clima” · desce pela escada</h3>
+          <div class="specs">
+            <div><span>Tamanho</span><strong>8,1 × 18,2 m</strong></div>
+            <div><span>Piso real</span><strong>a 4,0 m</strong></div>
+            <div><span>Triângulos</span><strong>231 mil</strong></div>
+            <div><span>Saída</span><strong>escada (1,5 → 3,9 m)</strong></div>
+          </div>
+          <p><strong>Votação:</strong> A = <em>Pôr do sol</em> · B = <em>Noite azul</em>. É o resultado original do Desafio 05 (a sala muda de cor).</p>
+          <p><strong>Ideia extra:</strong> som de chuva no telhado na opção noite.</p>
+          <p><strong>Corrigido:</strong> o piso fica 4 m acima da base do modelo; o vão da escada é coberto por um plano invisível, então a escada foi achada pela própria malha (<code>FrontSide_8</code>) e o portal fica no degrau mais alto. Materiais <em>unlit</em>: o tingimento é feito nos materiais. Sala mais pesada; medir fps no headset.</p>
+        </div>
+      </article>
+
+      <h3>Como o portal funciona</h3>
+      <ul>
+        <li>Anel de luz verde no chão e um feixe que some para cima, mais uma luz pontual. Em repouso, brilho fraco.</li>
+        <li>Com a <strong>cabeça</strong> dentro do círculo (raio 0,6 m), a luz pulsa cada vez mais rápida e forte por 1,2 s e então teleporta com fade para preto. Sair do círculo cancela.</li>
+        <li>Usa a posição da cabeça, não física: funciona andando de verdade, com o teleporte da Meta e até minúsculo ou gigante.</li>
+        <li>Ajustes no componente <code>DaoPortal</code>: <code>radius</code>, <code>dwellTime</code>, <code>color</code> e <code>chargeAudio</code> (um som de “carregando” deixa o efeito bem melhor).</li>
+      </ul>
+    </section>
+
+    <section id="web3">
+      <h2>Ideias de Web 3.0 para a metáfora</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ideia</th><th>Conceito que ensina</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Livro-razão</strong>: painel com cada voto e um hash de transação (fictício) no bloco #1025, #1026…</td><td>Blockchain como registro público</td><td><span class="pill ok">pronto</span></td></tr>
+          <tr><td><strong>Voto imutável</strong>: votar de novo mostra “esta carteira já votou”</td><td>1 carteira = 1 voto</td><td><span class="pill ok">pronto</span></td></tr>
+          <tr><td><strong>Membros simulados</strong>: 8 votos chegando um a um; no modo “Empate” o voto do visitante desempata</td><td>Decisão coletiva; cada voto conta</td><td><span class="pill ok">pronto</span></td></tr>
+          <tr><td><strong>Execução automática</strong> do resultado</td><td>Smart contract</td><td><span class="pill ok">pronto</span></td></tr>
+          <tr><td><strong>Tokens de governança</strong>: moedas escondidas (Grab) encaixadas numa carteira (Snap) aumentam o peso do voto (<code>DaoLedger.AddToken</code>)</td><td>Governança por token e o risco de quem tem mais mandar mais</td><td><span class="pill todo">montar as moedas</span></td></tr>
+          <tr><td><strong>Timelock</strong>: contagem regressiva “contrato executando…”</td><td>Atraso de segurança das DAOs reais</td><td><span class="pill todo">bônus</span></td></tr>
+          <tr><td><strong>Quórum</strong>: só passa com um mínimo de votos</td><td>Regras de validade</td><td><span class="pill todo">bônus</span></td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="quest">
+      <h2>Rodar no Quest</h2>
+      <ol class="steps">
+        <li><strong>Abram</strong> <code>DAO\CasaDaDAO_Quest</code> no Unity Hub com o Unity <strong>6000.3.9f1</strong> (já instalado, com Android).</li>
+        <li><strong>Testar pelo PC (rápido)</strong>: instalem o Meta Horizon Link, conectem o Quest por cabo USB-C e ativem o Link no headset. No app Meta Horizon Link do PC: Configurações &gt; Geral &gt; <em>Runtime OpenXR</em> &gt; “Definir Meta Horizon Link como ativo”. Depois deem Play na cena <code>DAO_3Salas</code>.</li>
+        <li><strong>Gerar o APK</strong>: menu <code>DAO &gt; Gerar APK para o Quest</code> (cerca de 18 min na primeira vez). Sai em <code>CasaDaDAO_Quest\Builds\CasaDaDAO.apk</code>.</li>
+        <li><strong>Instalar</strong>: arrastem o APK no Meta Quest Developer Hub, ou pelo terminal:
+<pre>adb install -r Builds\CasaDaDAO.apk</pre>
+          No headset: Biblioteca &gt; Fontes desconhecidas &gt; Casa da DAO.</li>
+        <li><strong>Testar sem headset (modo desktop)</strong>: com a cena <code>DAO_3Salas</code> aberta (menu <code>DAO &gt; Abrir cena principal</code>), apertem Play. Sem óculos conectados, o projeto troca sozinho o rig VR por uma câmera de mouse e teclado:
+          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> andar, <kbd>Shift</kbd> correr, <strong>botão direito + mouse</strong> olhar, <strong>clique esquerdo</strong> no botão azul/laranja do pedestal para votar, e parar dentro do círculo de luz verde para trocar de sala. Atalhos: <kbd>Z</kbd> <kbd>X</kbd> votar A/B, <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> ir para a sala, <kbd>R</kbd> reabrir votação, <kbd>T</kbd> +1 token, <kbd>0</kbd> escala normal, <kbd>H</kbd> esconder a ajuda. Clique uma vez na aba Game antes, para ela receber o teclado. Se o rig da Meta continuar ativo (câmera no chão), aperte <kbd>F1</kbd> para forçar o modo desktop.
+          Dois erros “Failed to initialize subsystem oculus display/input” são esperados sem óculos.</li>
+      </ol>
+      <div class="note"><p><strong>Primeiro teste no headset: escala e teleporte.</strong> O rig da Meta usa uma cápsula de personagem. O kit teleporta pelo evento oficial dela, mas encolher/aumentar o rig com a cápsula ativa só pode ser validado no Quest. Se algo brigar, o plano B é escalar a <em>sala</em> ao contrário em volta do jogador, com o mesmo efeito visual.</p></div>
+      <p>Se o professor fornecer um template próprio: importem <code>Kit\DAO_Kit_Completo.unitypackage</code> nele e rodem os três menus <code>DAO</code> na ordem.</p>
+    </section>
+
+    <section id="equipe">
+      <h2>Quem faz o quê</h2>
+      <div class="people">
+        <div>
+          <h3>Pessoa A · VR e builds</h3>
+          <ul>
+            <li>Link, Developer Hub e primeiro APK</li>
+            <li>Testar Poke, portais, escala e gravidade no Quest</li>
+            <li>Grab/Snap das moedas</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Pessoa B · Ambientes</h3>
+          <ul>
+            <li>Sons: clique, portal carregando, ambiente</li>
+            <li>Luz de cada sala, ajuste fino dos portais</li>
+            <li>Desempenho do sótão (72 fps)</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Pessoa C · DAO e roteiro</h3>
+          <ul>
+            <li>Textos dos painéis (até 3 frases)</li>
+            <li>Livro-razão, tela final e créditos</li>
+            <li>Roteiro, ensaio e vídeo de backup</li>
+          </ul>
+        </div>
+      </div>
+      <div class="days">
+        <div>
+          <h3>Dia 1 <small>restante</small></h3>
+          <ul>
+            <li>Abrir o projeto, Play pelo Link</li>
+            <li>Instalar o APK no Quest</li>
+            <li>Lista do que ajustar após o teste</li>
+          </ul>
+          <div class="deliver"><b>Entrega</b>Votar e trocar de sala no headset</div>
+        </div>
+        <div>
+          <h3>Dia 2 <small>6 h</small></h3>
+          <ul>
+            <li>4 h: sons, moedas, textos, tela final</li>
+            <li>1 h: teste com outra equipe</li>
+            <li>1 h: ajustes e build de teste</li>
+          </ul>
+          <div class="deliver"><b>Entrega</b>Experiência completa com build de teste</div>
+        </div>
+        <div>
+          <h3>Dia 3 <small>6 h</small></h3>
+          <ul>
+            <li>2 h: ajustes e build final</li>
+            <li>1 h: vídeo de backup e ensaio</li>
+            <li>3 h: apresentações</li>
+          </ul>
+          <div class="deliver"><b>Entrega</b>Experiência final apresentada</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="conforto">
+      <h2>Conforto e desempenho</h2>
+      <div class="two">
+        <div>
+          <h3>Conforto (20% da nota)</h3>
+          <ul>
+            <li>Teleporte só depois de 1,2 s parado na luz, com fade; nunca de surpresa.</li>
+            <li>Escala muda em 1,5 s e volta sozinha após 30 s (<code>autoResetAfter</code>).</li>
+            <li>Ao sair de uma sala, escala e gravidade voltam ao normal.</li>
+            <li>Painéis entre 1 e 2 m, texto grande; ofereçam jogar sentado.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Desempenho no Quest</h3>
+          <ul>
+            <li>Só a sala atual fica ligada.</li>
+            <li>URP sem sombras, MSAA 4x; uma luz por sala e uma por portal.</li>
+            <li>Meta: 72 fps. Usem o OVR Metrics Tool ou o Developer Hub para medir.</li>
+            <li>Se o sótão pesar: desliguem os objetos “BackSide” ou usem Decimate no Blender.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="riscos">
+      <h2>Riscos e plano B</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Risco</th><th>Plano</th></tr></thead>
+        <tbody>
+          <tr><td>Três salas não cabem no prazo</td><td>O ciclo já funciona; cortem extras (moedas, timelock) antes de mexer nas salas.</td></tr>
+          <tr><td>Escala do rig briga com a cápsula da Meta</td><td>Escalar a sala em vez do jogador.</td></tr>
+          <tr><td>Portal dispara sem querer</td><td>Aumentar <code>dwellTime</code> ou diminuir <code>radius</code> no <code>DaoPortal</code>.</td></tr>
+          <tr><td>Sótão pesado</td><td>Medir no Dia 1; Decimate ou desligar malhas invisíveis.</td></tr>
+          <tr><td>Rodar “Montar cena” apaga ajustes manuais</td><td>Gerar uma vez, depois só ajustar à mão (ou anotar e reaplicar).</td></tr>
+          <tr><td>Falha na apresentação</td><td>Vídeo de backup gravado no Dia 3.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="apresentacao">
+      <h2>Apresentação (5 min)</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tempo</th><th>Bloco</th><th>O que dizer ou fazer</th></tr></thead>
+        <tbody>
+          <tr><td class="num">30 s</td><td>Boas-vindas</td><td>“Uma DAO é um grupo que decide por votos, com regras num contrato, sem chefe. Nesta casa, quem manda são os votos.”</td></tr>
+          <tr><td class="num">2–3 min</td><td>Visitante em ação</td><td>Sala: vota “Minúsculo”, procura o token. Para na luz da porta → Cozinha: gravidade zero. Arco → Sótão: muda o clima. Tela final.</td></tr>
+          <tr><td class="num">1 min</td><td>A metáfora</td><td>O voto vira uma transação no livro-razão, não pode ser apagado, e a casa executa o resultado sozinha.</td></tr>
+          <tr><td class="num">1 min</td><td>Bastidores</td><td>Poke do Interaction SDK, rig completo da Meta, teleporte pelo locomotor, portais por posição da cabeça. Desafio: modelos com escala errada, móveis a 20 m de altura e uma escada coberta por um piso invisível.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="referencia">
+      <h2>Referência do kit</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Script</th><th>Para que serve</th><th>Métodos para ligar em eventos</th></tr></thead>
+        <tbody>
+          <tr><td><code>DaoPortal</code></td><td>Luz em frente à porta/escada; ficar dentro teleporta</td><td>eventos <em>On Player Enter / Exit / Teleport</em></td></tr>
+          <tr><td><code>DaoRoomManager</code></td><td>Salas, fade e teleporte (pelo locomotor da Meta)</td><td><code>GoToRoom(int)</code>, <code>NextRoom()</code></td></tr>
+          <tr><td><code>DaoButton</code></td><td>Ponte do Poke: som e anti-clique duplo</td><td><code>Press()</code></td></tr>
+          <tr><td><code>DaoProposal</code></td><td>Proposta, membros simulados, contagem e execução</td><td><code>VoteA()</code>, <code>VoteB()</code>, <code>ResetProposal()</code></td></tr>
+          <tr><td><code>DaoLedger</code></td><td>Livro-razão, tokens, conclusão</td><td><code>AddToken()</code>; <em>On Challenge Complete</em></td></tr>
+          <tr><td><code>DaoPlayerScale</code></td><td>Minúsculo e gigante</td><td><code>Shrink()</code>, <code>Grow()</code>, <code>ResetScale()</code></td></tr>
+          <tr><td><code>DaoRoomTint</code></td><td>Cor de luzes e materiais (inclusive unlit)</td><td><code>ApplyPalette(int)</code></td></tr>
+          <tr><td><code>DaoGravity</code></td><td>Gravidade zero, lunar ou normal</td><td><code>ZeroG()</code>, <code>Moon()</code>, <code>Restore()</code></td></tr>
+          <tr><td><code>DaoDesktopMode</code></td><td>Play sem óculos: mouse e teclado no lugar do rig VR</td><td>campo <em>Mode</em>: Automático, Sempre ligado, Desligado</td></tr>
+          <tr><td><code>DaoScreenFade</code>, <code>DaoText</code>, <code>DaoDoor</code>, <code>DaoDebugKeys</code></td><td>Fade, textos, porta por botão, atalhos</td><td>-</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Arquivos</h3>
+<pre>DAO\
+├─ CasaDaDAO_Quest\                    projeto principal (Unity 6.3 + Meta XR SDK + URP, Android)
+│   ├─ Assets\DAO\{Scripts, Shaders, Models, Scenes, Settings}
+│   ├─ Assets\DAOTests\                teste automático do fluxo (Window > General > Test Runner)
+│   └─ Builds\CasaDaDAO.apk            APK para o Quest
+├─ Kit\DAO_Kit_Completo.unitypackage   para importar em outro projeto (ex.: template do professor)
+└─ Guia\GUIA_DAO_VR.html               este guia (cópia em CasaDaDAO_Quest\Docs\Guia)
+
+GitHub: github.com/ArthurSsa/casa-da-dao-vr (a pasta CasaDaDAO_Quest)</pre>
+      <h3>Git</h3>
+      <p>Repositório <code>ArthurSsa/casa-da-dao-vr</code> (público). Clonem e abram a pasta no Unity Hub. O <code>.gitignore</code> deixa de fora <code>Library/</code>, <code>Temp/</code>, <code>Logs/</code>, <code>UserSettings/</code> e <code>Builds/</code>; a Unity recria tudo na primeira abertura. Antes de dar push, fechem a cena salva para não subir alterações sem querer, e combinem quem mexe na cena <code>DAO_3Salas</code> para evitar conflitos.</p>
+      <p><strong>Atenção à licença:</strong> os modelos da Sketchfab (licença Standard) não podem ser redistribuídos como arquivos soltos; com o repositório público, mantenham os créditos e, se a banca ou o professor pedirem, deixem o repositório privado.</p>
+    </section>
+
+    <section id="creditos">
+      <h2>Créditos</h2>
+      <ul>
+        <li>“Old living room” por Katydid, Sketchfab (licença Sketchfab Standard)</li>
+        <li>“Old attic” por Katydid, Sketchfab (licença Sketchfab Standard)</li>
+        <li>“Cartoon Kitchen Interior”: confirmem autor e licença na página onde baixaram</li>
+        <li>Meta XR SDK (Oculus SDK License)</li>
+      </ul>
+    </section>
+
+    <footer>Guia da equipe · Hackathon Web 3.0 em VR · novembro de 2026 · Unity 6.3 + Meta XR SDK v209 + Meta Quest 2/3</footer>
+  </main>
+</div>
