@@ -23,7 +23,15 @@ namespace DAO
         Renderer textRenderer;
         Bounds lastBounds;
 
-        void Awake() => Resolve();
+        void Awake()
+        {
+            Resolve();
+            // Texto em overlay (pop-ups/HUD): a textura da fonte dinâmica é ligada em tempo de execução.
+            var tm = GetComponent<TextMesh>();
+            var r = GetComponent<MeshRenderer>();
+            if (tm != null && r != null && tm.font != null && r.sharedMaterial != null && r.sharedMaterial.shader.name == "DAO/OverlayText")
+                r.sharedMaterial.mainTexture = tm.font.material.mainTexture;
+        }
 
         void Resolve()
         {
@@ -61,7 +69,17 @@ namespace DAO
             if (t != null) t.Set(value);
         }
 
-        void LateUpdate() => FitPanel(false);
+        void LateUpdate()
+        {
+            FitPanel(false);
+            // A fonte dinâmica pode recriar a textura ao ganhar novos caracteres: mantém o overlay apontando para ela.
+            if (textRenderer != null && textRenderer.sharedMaterial != null && textRenderer.sharedMaterial.shader.name == "DAO/OverlayText")
+            {
+                var tm = GetComponent<TextMesh>();
+                if (tm != null && tm.font != null && textRenderer.sharedMaterial.mainTexture != tm.font.material.mainTexture)
+                    textRenderer.sharedMaterial.mainTexture = tm.font.material.mainTexture;
+            }
+        }
 
         /// <summary>Encaixa o painel branco (e a borda) no tamanho atual do texto.</summary>
         public void FitPanel(bool force)

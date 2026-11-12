@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -213,6 +213,7 @@ namespace DAO.EditorTools
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuild(ScenePath);
+            AssetDatabase.SaveAssets(); // grava no disco os materiais de overlay (ordem de desenho dos pop-ups)
             Debug.Log("[DAO-BUILD] Cena salva em " + ScenePath);
         }
 
@@ -948,8 +949,10 @@ namespace DAO.EditorTools
                 {
                     string tp = $"{Root}/Materials/DAO_TextOverlay_{baseQueue}.mat";
                     var tm = AssetDatabase.LoadAssetAtPath<Material>(tp);
-                    if (tm == null) { tm = new Material(font.material); AssetDatabase.CreateAsset(tm, tp); }
-                    tm.SetFloat("unity_GUIZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
+                    var textShader = Shader.Find("DAO/OverlayText"); // ZTest Always gravado no shader (o material não guarda)
+                    if (tm == null) { tm = new Material(textShader); AssetDatabase.CreateAsset(tm, tp); }
+                    tm.shader = textShader;
+                    tm.mainTexture = font.material.mainTexture;
                     tm.renderQueue = baseQueue + 5;
                     EditorUtility.SetDirty(tm);
                     r.sharedMaterial = tm;
@@ -990,20 +993,20 @@ namespace DAO.EditorTools
             popup.root = root;
 
             // Fundo enorme: cobre a visão toda (desenhado por cima da sala).
-            popup.distance = 1.6f;
-            root.transform.localScale = Vector3.one * 1.3f;
+            popup.distance = 1.4f; // cabe no campo de visão do Quest (~50°)
+            root.transform.localScale = Vector3.one * 0.9f;
             var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
             bg.transform.localPosition = new Vector3(0, 0, 0.06f);
             bg.transform.localScale = new Vector3(12f, 8f, 1f);
 
-            proposal.titleText = MakeText(root.transform, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 0.8f, 0), 0.0021f, Ink, Blue);
-            proposal.curveText = MakeText(root.transform, "Curva", DaoProposal.CurveName(proposal.curve), new Vector3(0, 0.52f, 0), 0.0015f, Ink, Gold);
-            proposal.membersText = MakeText(root.transform, "Membros", "MEMBROS DA DAO", new Vector3(-0.6f, 0.13f, 0), 0.0012f, Ink, Blue);
+            proposal.titleText = MakeText(root.transform, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 0.62f, 0), 0.0021f, Ink, Blue);
+            proposal.curveText = MakeText(root.transform, "Curva", DaoProposal.CurveName(proposal.curve), new Vector3(0, 0.42f, 0), 0.0015f, Ink, Gold);
+            proposal.membersText = MakeText(root.transform, "Membros", "MEMBROS DA DAO", new Vector3(-0.48f, 0.1f, 0), 0.0012f, Ink, Blue);
             var wallet = holder.gameObject.AddComponent<DaoWalletPanel>();
             wallet.proposal = proposal;
             wallet.roomTokens = b.tokens;
-            wallet.text = MakeText(root.transform, "Carteira", "SUA CARTEIRA", new Vector3(0.6f, 0.1f, 0), 0.0012f, Ink, Gold);
-            ledgerTexts.Add(MakeText(root.transform, "Livro-Razao", "LIVRO-RAZÃO DA DAO", new Vector3(-0.6f, -0.43f, 0), 0.0011f, Ink, Green));
+            wallet.text = MakeText(root.transform, "Carteira", "SUA CARTEIRA", new Vector3(0.48f, 0.06f, 0), 0.0012f, Ink, Gold);
+            ledgerTexts.Add(MakeText(root.transform, "Livro-Razao", "LIVRO-RAZÃO DA DAO", new Vector3(-0.48f, -0.33f, 0), 0.0011f, Ink, Green));
             MakeText(root.transform, "Como jogar",
                 "COMO JOGAR\n" +
                 "Vote no palanque: botão A ou B (toque ou clique).\n" +
@@ -1013,11 +1016,11 @@ namespace DAO.EditorTools
                 "Mapas: botão B do controle ou tecla M.\n" +
                 "Pular: botão A do controle ou Espaço.\n" +
                 "Teclado: WASD anda · botão direito + mouse olha",
-                new Vector3(0.6f, -0.43f, 0), 0.0011f, Ink, Gray);
+                new Vector3(0.48f, -0.33f, 0), 0.0011f, Ink, Gray);
 
-            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(0, -0.8f, 0), Green, Quaternion.identity);
+            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(0, -0.6f, 0), Green, Quaternion.identity);
             UnityEventTools.AddPersistentListener(close.onPress, popup.Hide);
-            MakeText(root.transform, "Rotulo Fechar", "FECHAR E JOGAR  (botão A do controle ou clique aqui)", new Vector3(0, -0.9f, 0), 0.0013f, Ink, Green);
+            MakeText(root.transform, "Rotulo Fechar", "FECHAR E JOGAR  (botão A do controle ou clique aqui)", new Vector3(0, -0.68f, 0), 0.0013f, Ink, Green);
             MakeOverlay(root, 4000);
             root.SetActive(false);
             return popup;
@@ -1281,6 +1284,36 @@ namespace DAO.EditorTools
             tm.text = content;
             go.GetComponent<MeshRenderer>().sharedMaterial = font.material;
             return go.AddComponent<DaoText>();
+        }
+
+        /// <summary>Foto do pop-up de informações da 1ª sala visto do spawn (conferir sobreposição e tamanho).</summary>
+        public static void PopupPreviewCLI()
+        {
+            string dir = null;
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++) if (args[i] == "-previewDir") dir = args[i + 1];
+            EditorSceneManager.OpenScene(ScenePath);
+            var mgr = UnityEngine.Object.FindFirstObjectByType<DaoRoomManager>();
+            var room = mgr.rooms[0];
+            var cam = new GameObject("Preview Camera").AddComponent<Camera>();
+            cam.fieldOfView = 90f; // parecido com o campo de visão do Quest
+            cam.nearClipPlane = 0.03f;
+            cam.transform.SetPositionAndRotation(room.spawnPoint.position + Vector3.up * 1.6f, room.spawnPoint.rotation);
+            var popup = room.infoPopup;
+            popup.root.SetActive(true);
+            Vector3 fwd = cam.transform.forward; fwd.y = 0; fwd.Normalize();
+            popup.root.transform.SetPositionAndRotation(cam.transform.position + fwd * popup.distance + Vector3.up * popup.heightOffset, Quaternion.LookRotation(fwd));
+            foreach (var t in popup.root.GetComponentsInChildren<DaoText>(true)) { t.panel?.gameObject.SetActive(true); t.panelBorder?.gameObject.SetActive(true); t.FitPanel(true); }
+            var rt = new RenderTexture(1000, 1000, 24);
+            cam.targetTexture = rt;
+            cam.Render();
+            RenderTexture.active = rt;
+            var tex = new Texture2D(1000, 1000, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, 1000, 1000), 0, 0);
+            tex.Apply();
+            Directory.CreateDirectory(dir);
+            File.WriteAllBytes(Path.Combine(dir, "popup_sala.png"), tex.EncodeToPNG());
+            EditorApplication.Exit(0);
         }
 
         static void AddSceneToBuild(string path)

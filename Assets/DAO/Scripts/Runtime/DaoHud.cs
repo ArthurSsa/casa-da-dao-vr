@@ -10,8 +10,8 @@ namespace DAO
     {
         [Tooltip("Raiz do HUD: fica escondida enquanto algum pop-up estiver aberto.")]
         public GameObject hudRoot;
-        [Tooltip("Posição em relação aos olhos (x = direita, y = cima, z = frente). Canto superior direito.")]
-        public Vector3 hudPosition = new Vector3(0.34f, 0.2f, 0.7f);
+        [Tooltip("Posição em relação aos olhos (x = direita, y = cima, z = frente). No Quest o campo de visão de cada olho é estreito: x ~0.15 já fica à direita.")]
+        public Vector3 hudPosition = new Vector3(0.15f, 0.12f, 0.7f);
         [Tooltip("Tamanho do HUD (1 = original).")]
         public float hudScale = 1.4f;
         public DaoText walletText;
