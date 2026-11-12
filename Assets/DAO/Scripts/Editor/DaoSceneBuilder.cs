@@ -461,7 +461,7 @@ namespace DAO.EditorTools
             // Palanque só com botões: A, B, INFO e MAPAS.
             var green = new Color(0.25f, 0.8f, 0.45f);
             var gray = new Color(0.6f, 0.62f, 0.7f);
-            float[] xs = { -0.39f, -0.13f, 0.13f, 0.39f };
+            float[] xs = { -0.32f, 0f, 0.32f };
             for (int k = 0; k < 2; k++)
             {
                 var opt = proposal.options[k];
@@ -474,10 +474,7 @@ namespace DAO.EditorTools
             var infoBtn = MakePokeButton(st, "Botao INFO", new Vector3(xs[2], 0.92f, 0), green, Quaternion.Euler(90f, 0f, 0f));
             UnityEventTools.AddPersistentListener(infoBtn.onPress, info.Show);
             MakeText(st, "Rotulo INFO", "INFO", new Vector3(xs[2], 1.07f, 0.05f), 0.0014f, Ink, green);
-            var mapBtn = MakePokeButton(st, "Botao MAPAS", new Vector3(xs[3], 0.92f, 0), gray, Quaternion.Euler(90f, 0f, 0f));
-            UnityEventTools.AddPersistentListener(mapBtn.onPress, map.Show);
-            MakeText(st, "Rotulo MAPAS", "MAPAS", new Vector3(xs[3], 1.07f, 0.05f), 0.0014f, Ink, gray);
-            return proposal;
+            return proposal; // MAPAS fica no controle (botão B) e na tecla M
         }
 
         /// <summary>Espalha moedas de token pelo piso livre da sala (entre 1,5 e 4 m do spawn, longe da estação).</summary>
@@ -938,6 +935,42 @@ namespace DAO.EditorTools
         }
 #endif
 
+        /// <summary>
+        /// Faz um pop-up (ou o HUD) ser desenhado por cima de tudo: nada da sala atravessa e o palanque não corta.
+        /// Ordem: fundo < borda < painel < botões < texto (renderQueue a partir de baseQueue).
+        /// </summary>
+        static void MakeOverlay(GameObject root, int baseQueue)
+        {
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.GetComponent<TextMesh>() != null)
+                {
+                    string tp = $"{Root}/Materials/DAO_TextOverlay_{baseQueue}.mat";
+                    var tm = AssetDatabase.LoadAssetAtPath<Material>(tp);
+                    if (tm == null) { tm = new Material(font.material); AssetDatabase.CreateAsset(tm, tp); }
+                    tm.SetFloat("unity_GUIZTestMode", (float)UnityEngine.Rendering.CompareFunction.Always);
+                    tm.renderQueue = baseQueue + 5;
+                    EditorUtility.SetDirty(tm);
+                    r.sharedMaterial = tm;
+                    continue;
+                }
+                var src = r.sharedMaterial;
+                Color c = src == null ? Color.white : src.HasProperty("_BaseColor") ? src.GetColor("_BaseColor") : src.HasProperty("_Color") ? src.color : Color.white;
+                int q = r.name == "Moldura" ? 0 : r.name == "Fundo" ? 1 : r.name == "Borda" ? 2 : r.name == "Painel" ? 3 : 4;
+                string path = $"{Root}/Materials/DAO_Overlay_{baseQueue + q}_{ColorUtility.ToHtmlStringRGB(c)}.mat";
+                var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (m == null) { m = new Material(Shader.Find("DAO/Overlay")); AssetDatabase.CreateAsset(m, path); }
+                m.SetColor("_Color", c);
+                m.renderQueue = baseQueue + q;
+                EditorUtility.SetDirty(m);
+                var mats = r.sharedMaterials;
+                for (int i = 0; i < mats.Length; i++) mats[i] = m;
+                r.sharedMaterials = mats;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+
         static readonly Color Blue = new Color(0.25f, 0.45f, 0.9f);
         static readonly Color Green = new Color(0.25f, 0.8f, 0.45f);
         static readonly Color Gray = new Color(0.6f, 0.62f, 0.7f);
@@ -956,12 +989,12 @@ namespace DAO.EditorTools
             root.transform.SetParent(holder, false);
             popup.root = root;
 
+            // Fundo enorme: cobre a visão toda (desenhado por cima da sala).
+            popup.distance = 1.6f;
+            root.transform.localScale = Vector3.one * 1.3f;
             var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
             bg.transform.localPosition = new Vector3(0, 0, 0.06f);
-            bg.transform.localScale = new Vector3(2.5f, 1.95f, 1f);
-            var frame = PanelQuad(root.transform, "Moldura", Blue);
-            frame.transform.localPosition = new Vector3(0, 0, 0.065f);
-            frame.transform.localScale = new Vector3(2.54f, 1.99f, 1f);
+            bg.transform.localScale = new Vector3(12f, 8f, 1f);
 
             proposal.titleText = MakeText(root.transform, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 0.8f, 0), 0.0021f, Ink, Blue);
             proposal.curveText = MakeText(root.transform, "Curva", DaoProposal.CurveName(proposal.curve), new Vector3(0, 0.52f, 0), 0.0015f, Ink, Gold);
@@ -976,17 +1009,16 @@ namespace DAO.EditorTools
                 "Vote no palanque: botão A ou B (toque ou clique).\n" +
                 "Moedas douradas: chegue perto ou clique = +1 token.\n" +
                 "Pare na luz verde da porta/escada para trocar de sala.\n" +
-                "INFO reabre este painel · MAPAS vai direto a outra sala.\n" +
+                "INFO (palanque) reabre este painel.\n" +
+                "Mapas: botão B do controle ou tecla M.\n" +
                 "Pular: botão A do controle ou Espaço.\n" +
                 "Teclado: WASD anda · botão direito + mouse olha",
                 new Vector3(0.6f, -0.43f, 0), 0.0011f, Ink, Gray);
 
-            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(-0.16f, -0.8f, 0), Green, Quaternion.identity);
+            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(0, -0.8f, 0), Green, Quaternion.identity);
             UnityEventTools.AddPersistentListener(close.onPress, popup.Hide);
-            MakeText(root.transform, "Rotulo Fechar", "FECHAR E JOGAR", new Vector3(-0.16f, -0.9f, 0), 0.0013f, Ink, Green);
-            var maps = MakePokeButton(root.transform, "Botao Mapas", new Vector3(0.16f, -0.8f, 0), Gray, Quaternion.identity);
-            UnityEventTools.AddPersistentListener(maps.onPress, map.Show);
-            MakeText(root.transform, "Rotulo Mapas", "MAPAS", new Vector3(0.16f, -0.9f, 0), 0.0013f, Ink, Gray);
+            MakeText(root.transform, "Rotulo Fechar", "FECHAR E JOGAR  (botão A do controle ou clique aqui)", new Vector3(0, -0.9f, 0), 0.0013f, Ink, Green);
+            MakeOverlay(root, 4000);
             root.SetActive(false);
             return popup;
         }
@@ -997,15 +1029,17 @@ namespace DAO.EditorTools
             var holder = new GameObject("Popup Mapas").transform;
             holder.SetParent(popupsParent, false);
             var popup = holder.gameObject.AddComponent<DaoPanelPopup>();
-            popup.distance = 1.0f;
+            popup.distance = 0.55f; // ao alcance da mão (poke); desenhado por cima de tudo
+            popup.heightOffset = -0.12f;
             var menu = holder.gameObject.AddComponent<DaoMapMenu>();
             menu.popup = popup;
             var root = new GameObject("Conteudo");
             root.transform.SetParent(holder, false);
+            root.transform.localScale = Vector3.one * 0.6f;
             popup.root = root;
             var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
             bg.transform.localPosition = new Vector3(0, 0, 0.06f);
-            bg.transform.localScale = new Vector3(1.5f, 0.95f, 1f);
+            bg.transform.localScale = new Vector3(12f, 8f, 1f);
             MakeText(root.transform, "Titulo", "MAPAS\nEscolha uma sala para ir direto", new Vector3(0, 0.3f, 0), 0.0018f, Ink, Gray);
             for (int i = 0; i < roomNames.Length; i++)
             {
@@ -1017,7 +1051,8 @@ namespace DAO.EditorTools
             }
             var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(0, -0.28f, 0), Gray, Quaternion.identity);
             UnityEventTools.AddPersistentListener(close.onPress, menu.Hide);
-            MakeText(root.transform, "Rotulo Fechar", "FECHAR", new Vector3(0, -0.38f, 0), 0.0013f, Ink, Gray);
+            MakeText(root.transform, "Rotulo Fechar", "FECHAR (botão B)", new Vector3(0, -0.38f, 0), 0.0013f, Ink, Gray);
+            MakeOverlay(root, 4100);
             root.SetActive(false);
             return menu;
         }
@@ -1027,13 +1062,16 @@ namespace DAO.EditorTools
         {
             var hudRoot = new GameObject("HUD (canto da visao)").transform;
             hudRoot.SetParent(head, false);
-            hudRoot.localPosition = new Vector3(0.27f, -0.19f, 0.75f);
+            hudRoot.localPosition = new Vector3(0.24f, -0.16f, 0.7f);
             var hud = systems.AddComponent<DaoHud>();
-            hud.walletText = MakeText(hudRoot, "HUD Carteira", "Tokens", new Vector3(0, 0.075f, 0), 0.00075f, Ink, Gold);
-            tally = MakeText(hudRoot, "HUD Placar", "PLACAR", new Vector3(0, 0f, 0), 0.00075f, Ink, Green);
-            status = MakeText(hudRoot, "HUD Status", "", new Vector3(0, -0.085f, 0), 0.0007f, Ink, Gray);
+            hud.hudRoot = hudRoot.gameObject;
+            hud.walletText = MakeText(hudRoot, "HUD Carteira", "Tokens", new Vector3(0, 0.042f, 0), 0.0004f, Ink, Gold);
+            tally = MakeText(hudRoot, "HUD Placar", "PLACAR", new Vector3(0, 0f, 0), 0.0004f, Ink, Green);
+            status = MakeText(hudRoot, "HUD Status", "", new Vector3(0, -0.045f, 0), 0.00038f, Ink, Gray);
+            foreach (var dt in new[] { hud.walletText, tally, status }) { dt.padding *= 0.5f; dt.borderWidth = 0.004f; }
             hud.tallyText = tally;
             hud.statusText = status;
+            MakeOverlay(hudRoot.gameObject, 3900);
         }
 
         /// <summary>Pop-up de finalização (escondido) com resumo e botões Reiniciar / Continuar explorando.</summary>
@@ -1052,6 +1090,13 @@ namespace DAO.EditorTools
             var close = MakePokeButton(root.transform, "Botao Continuar", new Vector3(0.18f, -0.32f, 0), gray, Quaternion.identity);
             UnityEventTools.AddPersistentListener(close.onPress, popup.Hide);
             MakeText(root.transform, "Rotulo Continuar", "CONTINUAR\nEXPLORANDO", new Vector3(0.18f, -0.44f, 0), 0.0016f, Ink, gray);
+            // Cobre a visão e fica ao alcance da mão (poke), desenhado por cima de tudo.
+            var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
+            bg.transform.localPosition = new Vector3(0, 0, 0.06f);
+            bg.transform.localScale = new Vector3(12f, 8f, 1f);
+            root.transform.localScale = Vector3.one * 0.6f;
+            popup.distance = 0.6f;
+            MakeOverlay(root, 4200);
             root.SetActive(false);
         }
 

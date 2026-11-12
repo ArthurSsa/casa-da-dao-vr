@@ -8,6 +8,8 @@ namespace DAO
     /// </summary>
     public class DaoHud : MonoBehaviour
     {
+        [Tooltip("Raiz do HUD: fica escondida enquanto algum pop-up estiver aberto.")]
+        public GameObject hudRoot;
         public DaoText walletText;
         [Tooltip("Mesmo DaoText usado como tallyText de todas as propostas.")]
         public DaoText tallyText;
@@ -37,6 +39,14 @@ namespace DAO
 
         void Update()
         {
+            if (hudRoot != null)
+            {
+                bool popupOpen = false;
+                foreach (var p in FindObjectsByType<DaoPanelPopup>(FindObjectsSortMode.None)) popupOpen |= p.IsOpen;
+                var done = FindFirstObjectByType<DaoCompletionPopup>();
+                if (done != null && done.popupRoot != null && done.popupRoot.activeSelf) popupOpen = true;
+                if (hudRoot.activeSelf == popupOpen) hudRoot.SetActive(!popupOpen);
+            }
             if (Time.time < next) return;
             next = Time.time + 0.5f;
             RefreshWallet();

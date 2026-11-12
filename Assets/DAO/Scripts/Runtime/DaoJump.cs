@@ -6,18 +6,35 @@ using Oculus.Interaction.Locomotion;
 namespace DAO
 {
     /// <summary>
-    /// Pulo: botão A do controle direito do Quest (pulo do locomotor da Meta) e Espaço no modo desktop.
+    /// Botões do controle do Quest:
+    ///   A (direito) = fecha o painel de informações aberto; sem painel aberto, pula (locomotor da Meta).
+    ///   B (direito) ou Y (esquerdo) = abre/fecha o menu de mapas.
+    /// No modo desktop: Espaço pula e M abre os mapas.
     /// </summary>
     public class DaoJump : MonoBehaviour
     {
-        bool previous;
+        bool prevA, prevB, prevY;
+
+        static bool Button(UnityEngine.XR.XRNode node, UnityEngine.XR.InputFeatureUsage<bool> usage)
+        {
+            var d = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(node);
+            return d.isValid && d.TryGetFeatureValue(usage, out bool v) && v;
+        }
 
         void Update()
         {
-            var right = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand);
-            bool pressed = right.isValid && right.TryGetFeatureValue(UnityEngine.XR.CommonUsages.primaryButton, out bool a) && a;
-            if (pressed && !previous) Jump();
-            previous = pressed;
+            bool a = Button(UnityEngine.XR.XRNode.RightHand, UnityEngine.XR.CommonUsages.primaryButton);
+            bool b = Button(UnityEngine.XR.XRNode.RightHand, UnityEngine.XR.CommonUsages.secondaryButton);
+            bool y = Button(UnityEngine.XR.XRNode.LeftHand, UnityEngine.XR.CommonUsages.secondaryButton);
+
+            if (a && !prevA)
+            {
+                var info = DaoRoomManager.Instance?.CurrentRoom?.infoPopup;
+                if (info != null && info.IsOpen) info.Hide();
+                else Jump();
+            }
+            if ((b && !prevB) || (y && !prevY)) FindFirstObjectByType<DaoMapMenu>()?.Toggle();
+            prevA = a; prevB = b; prevY = y;
         }
 
         public void Jump()
