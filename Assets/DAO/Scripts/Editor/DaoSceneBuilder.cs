@@ -48,6 +48,8 @@ namespace DAO.EditorTools
             public string exitMeshName; // StairsMesh: nome da malha da escada
             public bool closeOpenWalls;  // fecha lados sem parede (modelos de vitrine da Sketchfab)
             public Color wallColor = new Color(0.91f, 0.74f, 0.6f);
+            public DaoVotingCurve curve;
+            public (string name, int tokens, int option)[] members = new (string, int, int)[0];
             public int exitTo;
             public string exitName;
         }
@@ -61,16 +63,25 @@ namespace DAO.EditorTools
                 floorY = 0.05f, addCeiling = true, closeOpenWalls = true, wallColor = new Color(0.42f, 0.24f, 0.13f),
                 exit = ExitKind.DoorPoint, exitLocal = new Vector3(-276.75f, 2f, -84.2f), exitInwardLocal = Vector3.right,
                 exitTo = 1, exitName = "Porta",
+                // Linear: A 3+3 = 6 x B 2+4 = 6 -> empate; o voto do visitante decide.
+                curve = DaoVotingCurve.Linear,
+                members = new[] { ("Ana", 3, 0), ("Bia", 2, 1), ("Caio", 4, 1), ("Duda", 3, 0) },
                 proposalTitle = "Proposta #1 - Tamanho", proposalDesc = "Como a DAO quer que você explore a sala?",
                 optA = "Minúsculo", colA = new Color(0.25f, 0.6f, 1f), optB = "Gigante", colB = new Color(1f, 0.55f, 0.2f) },
             new RoomDef { name = "Cozinha", modelFile = "Cartoon Kitchen Interior", scale = 1f, effect = Effect.Gravity,
                 floorY = 0.62f, addCeiling = true, fixFloating = true, closeOpenWalls = true,
                 exit = ExitKind.WallOpening, exitTo = 2, exitName = "Arco",
+                // Exponencial: A 1+1+1 = 3 x Baleia 5 tokens = 31. Só vence a baleia com 5+ tokens (moedas!).
+                curve = DaoVotingCurve.Exponencial,
+                members = new[] { ("Ana", 1, 0), ("Bia", 1, 0), ("Caio", 1, 0), ("Baleia", 5, 1) },
                 proposalTitle = "Proposta #2 - Física", proposalDesc = "Qual gravidade vale na cozinha?",
                 optA = "Gravidade zero", colA = new Color(0.6f, 0.3f, 1f), optB = "Gravidade lunar", colB = new Color(0.7f, 0.7f, 0.75f) },
             new RoomDef { name = "Sótão", modelFile = "old_attic", scale = 1f, effect = Effect.Tint,
                 floorY = 4.04f,
                 exit = ExitKind.StairsMesh, exitMeshName = "FrontSide_8", exitTo = 0, exitName = "Escada",
+                // Exponencial invertida (log2): A 1+1+2 = 4 x Baleia 15 tokens = 4 -> empate; muitos pequenos igualam a baleia.
+                curve = DaoVotingCurve.ExponencialInvertida,
+                members = new[] { ("Ana", 1, 0), ("Bia", 1, 0), ("Caio", 3, 0), ("Baleia", 15, 1) },
                 proposalTitle = "Proposta #3 - Clima", proposalDesc = "Qual atmosfera o sótão deve ter?",
                 optA = "Pôr do sol", colA = new Color(1f, 0.6f, 0.25f), optB = "Noite azul", colB = new Color(0.3f, 0.5f, 1f) },
         };
@@ -89,6 +100,8 @@ namespace DAO.EditorTools
             public GameObject model;
             public float floorY;
             public DaoPortal portal;
+            public List<Vector3> clear = new List<Vector3>();
+            public DaoToken[] tokens = new DaoToken[0];
         }
 
         [MenuItem("DAO/Montar cena das 3 salas")]
@@ -162,15 +175,18 @@ namespace DAO.EditorTools
             rooms = new List<Built>();
             for (int i = 0; i < Defs.Length; i++) rooms.Add(BuildRoom(i, Defs[i]));
 
-            // Portas, votação e painéis (precisam conhecer todas as salas).
+            // Portas, moedas, votação e painéis (precisam conhecer todas as salas).
             var ledgerTexts = new List<DaoText>();
-            var walletTexts = new List<DaoText>();
             for (int i = 0; i < rooms.Count; i++)
             {
                 var b = rooms[i];
-                b.proposal = BuildVoteStation(b, ledgerTexts, walletTexts);
                 BuildPortal(b, rooms[b.def.exitTo].def.name);
+                BuildTokens(b, 3);
+                b.proposal = BuildVoteStation(b, ledgerTexts);
                 WireEffect(b, scaler);
+#if DAO_HAS_META
+                foreach (var rb in b.root.GetComponentsInChildren<Rigidbody>()) MakeGrabbable(rb);
+#endif
 
                 mgr.rooms.Add(new DaoRoom { name = b.def.name, root = b.root, spawnPoint = b.spawn, proposal = b.proposal });
                 var room = mgr.rooms[i];
@@ -179,16 +195,9 @@ namespace DAO.EditorTools
                 if (grav != null) UnityEventTools.AddPersistentListener(room.onExit, grav.Restore);
             }
             ledger.ledgerTexts = ledgerTexts.ToArray();
-            ledger.walletTexts = walletTexts.ToArray();
             ledger.proposalsToComplete = rooms.Count;
 
-            // Tela de conclusão placeholder (o template do professor já tem uma: ligue o onChallengeComplete nela).
-            var done = new GameObject("Desafio Concluido (placeholder)");
-            done.transform.SetParent(head, false);
-            done.transform.localPosition = new Vector3(0, 0, 1.2f);
-            MakeText(done.transform, "Texto", "DESAFIO CONCLUÍDO!\nVocê governou as 3 salas.", Vector3.zero, 0.0035f, Color.green);
-            done.SetActive(false);
-            UnityEventTools.AddBoolPersistentListener(ledger.onChallengeComplete, done.SetActive, true);
+            BuildCompletionPopup(systems.transform);
 
             // Posiciona o placeholder no spawn da primeira sala (no Play o manager faz isso).
             rig.SetPositionAndRotation(rooms[0].spawn.position, rooms[0].spawn.rotation);
@@ -289,12 +298,7 @@ namespace DAO.EditorTools
             b.spawn.SetParent(b.root.transform, false);
             PlaceSpawn(b, floorY);
 
-            // Chão de segurança na altura do piso.
-            var floor = new GameObject("Chao (collider)");
-            floor.transform.SetParent(b.root.transform, false);
-            var fc = floor.AddComponent<BoxCollider>();
-            fc.center = new Vector3(bounds.center.x - b.root.transform.position.x, floorY - 0.05f, bounds.center.z - b.root.transform.position.z);
-            fc.size = new Vector3(bounds.size.x, 0.1f, bounds.size.z);
+            BuildSafetyColliders(b, floorY);
 
             // Luz da sala (sem sombra; só fica ligada quando a sala está ativa).
             var light = new GameObject("Luz da sala").AddComponent<Light>();
@@ -305,6 +309,33 @@ namespace DAO.EditorTools
             light.shadows = LightShadows.None;
             light.transform.position = b.spawn.position + Vector3.up * Mathf.Min(2.6f, bounds.max.y - floorY - 0.3f);
             return b;
+        }
+
+        /// <summary>
+        /// Colisões de segurança: chão grosso (1 m) na altura do piso e quatro paredes invisíveis em volta da sala.
+        /// Junto com as MeshColliders do modelo e o anti-queda do DaoRoomManager, ninguém cai para fora do mapa.
+        /// </summary>
+        static void BuildSafetyColliders(Built b, float floorY)
+        {
+            var bb = b.bounds;
+            var group = new GameObject("Colisoes de seguranca").transform;
+            group.SetParent(b.root.transform, false);
+            void Box(string name, Vector3 center, Vector3 size)
+            {
+                var go = new GameObject(name);
+                go.layer = 2; // Ignore Raycast: não atrapalha a detecção de portas nem cliques
+                go.transform.SetParent(group, false);
+                go.transform.position = center;
+                go.AddComponent<BoxCollider>().size = size;
+            }
+            Box("Chao grosso", new Vector3(bb.center.x, floorY - 0.5f, bb.center.z), new Vector3(bb.size.x + 1f, 1f, bb.size.z + 1f));
+            float h = bb.max.y - floorY + 2f;
+            float cy = floorY + h * 0.5f - 0.5f;
+            const float t = 0.5f;
+            Box("Parede invisivel +X", new Vector3(bb.max.x + t * 0.5f, cy, bb.center.z), new Vector3(t, h + 1f, bb.size.z + 2f * t));
+            Box("Parede invisivel -X", new Vector3(bb.min.x - t * 0.5f, cy, bb.center.z), new Vector3(t, h + 1f, bb.size.z + 2f * t));
+            Box("Parede invisivel +Z", new Vector3(bb.center.x, cy, bb.max.z + t * 0.5f), new Vector3(bb.size.x + 2f * t, h + 1f, t));
+            Box("Parede invisivel -Z", new Vector3(bb.center.x, cy, bb.min.z - t * 0.5f), new Vector3(bb.size.x + 2f * t, h + 1f, t));
         }
 
         /// <summary>
@@ -330,6 +361,7 @@ namespace DAO.EditorTools
                     clear.Add(new Vector3(x, hit.point.y, z));
                 }
             Physics.queriesHitBackfaces = prevBack;
+            b.clear = clear;
 
             Vector3 center = new Vector3(bb.center.x, floorY, bb.center.z);
             if (clear.Count == 0)
@@ -382,43 +414,106 @@ namespace DAO.EditorTools
             Debug.Log($"[DAO-BUILD] {model.name}: {floating.Count} objetos estavam {shift:F2} m acima do piso e foram baixados.");
         }
 
-        static DaoProposal BuildVoteStation(Built b, List<DaoText> ledgerTexts, List<DaoText> walletTexts)
+        static readonly Color Ink = new Color(0.07f, 0.09f, 0.16f);
+        static readonly Color Gold = new Color(1f, 0.78f, 0.15f);
+
+        static Transform PanelFacingSpawn(Built b, string name, Vector3 local)
+        {
+            var t = new GameObject(name).transform;
+            t.SetParent(b.spawn, false);
+            t.localPosition = local;
+            t.localRotation = Quaternion.LookRotation(new Vector3(local.x, 0, local.z));
+            return t;
+        }
+
+        static DaoProposal BuildVoteStation(Built b, List<DaoText> ledgerTexts)
         {
             var st = new GameObject("Estacao de Votacao").transform;
             st.SetParent(b.spawn, false);
             st.localPosition = new Vector3(0, 0, 1.1f);
 
-            var pedestal = Cube(st, "Pedestal", new Vector3(0, 0.45f, 0), new Vector3(0.9f, 0.9f, 0.4f), new Color(0.12f, 0.12f, 0.2f));
-            UnityEngine.Object.DestroyImmediate(pedestal.GetComponent<Collider>());
+            // Palanque com colisão (não dá para atravessar).
+            Cube(st, "Pedestal", new Vector3(0, 0.45f, 0), new Vector3(0.9f, 0.9f, 0.4f), new Color(0.12f, 0.12f, 0.2f));
 
             var proposal = st.gameObject.AddComponent<DaoProposal>();
             proposal.title = b.def.proposalTitle;
             proposal.description = b.def.proposalDesc;
+            proposal.curve = b.def.curve;
+            proposal.members = b.def.members.Select(m => new DaoMember { name = m.name, tokens = m.tokens, option = m.option }).ToList();
             proposal.options = new List<DaoOption>
             {
                 new DaoOption { label = b.def.optA, color = b.def.colA },
                 new DaoOption { label = b.def.optB, color = b.def.colB },
             };
-            proposal.titleText = MakeText(st, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 1.75f, 0.1f), 0.0028f, Color.white);
-            proposal.tallyText = MakeText(st, "Placar", $"{b.def.optA}: 0   x   {b.def.optB}: 0", new Vector3(0, 1.45f, 0.1f), 0.0032f, Color.yellow);
-            proposal.statusText = MakeText(st, "Status", "Aperte um botão para votar.", new Vector3(0, 1.22f, 0.1f), 0.0018f, new Color(0.8f, 0.9f, 1f));
+            proposal.titleText = MakeText(st, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 2.05f, 0.1f), 0.0026f, Ink, new Color(0.25f, 0.45f, 0.9f));
+            proposal.curveText = MakeText(st, "Curva", DaoProposal.CurveName(b.def.curve), new Vector3(0, 1.78f, 0.1f), 0.0019f, Ink, Gold);
+            proposal.tallyText = MakeText(st, "Placar", "PLACAR", new Vector3(0, 1.52f, 0.1f), 0.0021f, Ink, new Color(0.2f, 0.6f, 0.35f));
+            proposal.statusText = MakeText(st, "Status", "Aperte um botão para votar.", new Vector3(0, 1.27f, 0.1f), 0.0016f, Ink, new Color(0.5f, 0.5f, 0.55f));
 
             for (int k = 0; k < 2; k++)
             {
                 var opt = proposal.options[k];
-                var db = MakePokeButton(st, "Botao " + (k == 0 ? "A" : "B") + " - " + opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 0.92f, 0), opt.color);
+                var db = MakePokeButton(st, "Botao " + (k == 0 ? "A" : "B") + " - " + opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 0.92f, 0), opt.color, Quaternion.Euler(90f, 0f, 0f));
                 UnityEventTools.AddIntPersistentListener(db.onPress, proposal.Vote, k);
-                MakeText(st, "Rotulo " + k, opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 1.05f, 0.05f), 0.0018f, opt.color);
+                MakeText(st, "Rotulo " + k, (k == 0 ? "A: " : "B: ") + opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 1.06f, 0.05f), 0.0017f, Ink, opt.color);
             }
 
-            // Painel do livro-razão + carteira, à esquerda.
-            var panel = new GameObject("Painel Livro-Razao").transform;
-            panel.SetParent(b.spawn, false);
-            panel.localPosition = new Vector3(-1.4f, 1.5f, 0.9f);
-            panel.localRotation = Quaternion.LookRotation(new Vector3(-1.4f, 0, 0.9f));
-            ledgerTexts.Add(MakeText(panel, "Livro-Razao", "LIVRO-RAZÃO DA DAO", Vector3.zero, 0.0016f, new Color(0.6f, 1f, 0.7f)));
-            walletTexts.Add(MakeText(panel, "Carteira", "Carteira: 0 token(s)", new Vector3(0, -0.45f, 0), 0.002f, Color.cyan));
+            // Membros (esquerda), carteira (direita) e livro-razão (mais à esquerda), todos virados para o spawn.
+            proposal.membersText = MakeText(PanelFacingSpawn(b, "Painel Membros", new Vector3(-1.05f, 1.45f, 1.0f)), "Membros", "MEMBROS DA DAO", Vector3.zero, 0.0016f, Ink, new Color(0.25f, 0.45f, 0.9f));
+            var wallet = PanelFacingSpawn(b, "Painel Carteira", new Vector3(1.05f, 1.45f, 1.0f)).gameObject.AddComponent<DaoWalletPanel>();
+            wallet.proposal = proposal;
+            wallet.text = MakeText(wallet.transform, "Carteira", "SUA CARTEIRA", Vector3.zero, 0.0016f, Ink, Gold);
+            wallet.roomTokens = b.tokens;
+            ledgerTexts.Add(MakeText(PanelFacingSpawn(b, "Painel Livro-Razao", new Vector3(-1.7f, 1.55f, 0.1f)), "Livro-Razao", "LIVRO-RAZÃO DA DAO", Vector3.zero, 0.0015f, Ink, new Color(0.2f, 0.6f, 0.35f)));
             return proposal;
+        }
+
+        /// <summary>Espalha moedas de token pelo piso livre da sala (entre 1,5 e 4 m do spawn, longe da estação).</summary>
+        static void BuildTokens(Built b, int count)
+        {
+            var spawn = b.spawn.position;
+            var station = b.spawn.TransformPoint(new Vector3(0, 0, 1.1f));
+            var portal = b.portal != null ? b.portal.transform.position : new Vector3(9999, 0, 0);
+            var candidates = b.clear
+                .Where(p => { float d = Vector3.Distance(new Vector3(p.x, 0, p.z), new Vector3(spawn.x, 0, spawn.z)); return d > 1.5f && d < 4.5f; })
+                .Where(p => Vector3.Distance(p, station) > 1.2f && Vector3.Distance(p, portal) > 1.5f)
+                .ToList();
+            var chosen = new List<Vector3>();
+            var rnd = new System.Random(b.def.name.Length * 7919);
+            while (chosen.Count < count && candidates.Count > 0)
+            {
+                var p = candidates[rnd.Next(candidates.Count)];
+                candidates.RemoveAll(c => Vector3.Distance(c, p) < 1.5f);
+                chosen.Add(p);
+            }
+            var list = new List<DaoToken>();
+            for (int i = 0; i < chosen.Count; i++)
+            {
+                var go = new GameObject("Moeda de token " + (i + 1));
+                go.transform.SetParent(b.root.transform, false);
+                go.transform.position = chosen[i] + Vector3.up * 0.9f;
+                var coin = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                coin.name = "Moeda";
+                UnityEngine.Object.DestroyImmediate(coin.GetComponent<Collider>());
+                coin.transform.SetParent(go.transform, false);
+                coin.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                coin.transform.localScale = new Vector3(0.22f, 0.02f, 0.22f);
+                coin.GetComponent<MeshRenderer>().sharedMaterial = EmissiveMaterial(Gold);
+                var visual = new GameObject("Visual").transform;
+                visual.SetParent(go.transform, false);
+                coin.transform.SetParent(visual, true);
+                var sc = go.AddComponent<SphereCollider>();
+                sc.radius = 0.18f;
+                sc.isTrigger = true;
+                go.AddComponent<DaoButton>(); // clique (desktop) ou toque coleta
+                var token = go.AddComponent<DaoToken>();
+                token.visual = visual;
+                token.toast = MakeText(go.transform, "Toast", "+1 token", new Vector3(0, 0.3f, 0), 0.0018f, Ink, Gold);
+                UnityEventTools.AddPersistentListener(go.GetComponent<DaoButton>().onPress, token.Collect);
+                list.Add(token);
+            }
+            b.tokens = list.ToArray();
+            Debug.Log($"[DAO-BUILD] {b.def.name}: {list.Count} moedas de token.");
         }
 
         /// <summary>
@@ -441,7 +536,7 @@ namespace DAO.EditorTools
             portal.label = $"{b.def.exitName} para {targetName}";
             portal.color = PortalColor;
             portal.glowMaterial = GetGlowMaterial();
-            portal.labelText = MakeText(go.transform, "Rotulo", portal.label + "\nfique na luz", new Vector3(0, 2.55f, 0), 0.0024f, PortalColor);
+            portal.labelText = MakeText(go.transform, "Rotulo", portal.label + "\nfique na luz", new Vector3(0, 2.55f, 0), 0.0024f, Ink, PortalColor);
             portal.BuildVisuals();
             b.portal = portal;
             float toSpawn = Vector3.Distance(new Vector3(pos.x, 0, pos.z), new Vector3(b.spawn.position.x, 0, b.spawn.position.z));
@@ -656,6 +751,8 @@ namespace DAO.EditorTools
             switch (b.def.effect)
             {
                 case Effect.Scale:
+                    scaler.worldRoot = b.root.transform; // escala a sala, não o jogador
+                    scaler.statusText = p.statusText;
                     UnityEventTools.AddPersistentListener(p.options[0].onWin, scaler.Shrink);
                     UnityEventTools.AddPersistentListener(p.options[1].onWin, scaler.Grow);
                     float height = b.bounds.size.y;
@@ -763,13 +860,13 @@ namespace DAO.EditorTools
         /// Botão de votação. Com o Meta XR SDK: template oficial de Poke (afunda ao ser tocado pela mão ou controle),
         /// com o InteractableUnityEventWrapper.WhenSelect ligado em DaoButton.Press. Sem o SDK: um cubo simples.
         /// </summary>
-        static DaoButton MakePokeButton(Transform parent, string name, Vector3 localPos, Color color)
+        static DaoButton MakePokeButton(Transform parent, string name, Vector3 localPos, Color color, Quaternion localRotation)
         {
 #if DAO_HAS_META
             var go = (GameObject)PrefabUtility.InstantiatePrefab(LoadByGuid<GameObject>(PokeTemplateGuid), parent);
             go.name = name;
             go.transform.localPosition = localPos;
-            go.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // face de toque (-Z) virada para cima
+            go.transform.localRotation = localRotation; // face de toque (-Z) virada para o jogador
             go.transform.localScale = Vector3.one * 0.11f;
             foreach (var r in go.GetComponentsInChildren<MeshRenderer>(true))
                 if (r.transform.parent != null && r.transform.parent.name != "Surface") r.sharedMaterial = ColorMaterial(color);
@@ -794,6 +891,57 @@ namespace DAO.EditorTools
             var btn = Cube(parent, name, localPos, new Vector3(0.14f, 0.06f, 0.14f), color);
             return btn.AddComponent<DaoButton>();
 #endif
+        }
+
+#if DAO_HAS_META
+        const string HandGrabTemplateGuid = "6ee61821e0d5b094a8d732834b365b21"; // interaction/ISDK_HandGrabInteraction
+
+        /// <summary>Mesma receita do "Add Grab Interaction" da Meta: Grabbable + HandGrab/Grab interactables (mãos e controles).</summary>
+        static void MakeGrabbable(Rigidbody rb)
+        {
+            var target = rb.gameObject;
+            if (target.GetComponent<Grabbable>() != null) return;
+            var grabbable = target.AddComponent<Grabbable>();
+            grabbable.InjectOptionalTargetTransform(target.transform);
+            var obj = (GameObject)UnityEngine.Object.Instantiate(LoadByGuid<GameObject>(HandGrabTemplateGuid));
+            obj.name = "ISDK_HandGrabInteraction";
+            obj.transform.SetParent(target.transform, false);
+            obj.transform.localPosition = Vector3.zero;
+            obj.transform.localRotation = Quaternion.identity;
+            obj.transform.localScale = Vector3.one;
+            var hand = obj.GetComponent<Oculus.Interaction.HandGrab.HandGrabInteractable>();
+            if (hand != null)
+            {
+                hand.InjectRigidbody(rb);
+                hand.InjectSupportedGrabTypes(Oculus.Interaction.Grab.GrabTypeFlags.All);
+                hand.InjectOptionalPointableElement(grabbable);
+            }
+            var grab = obj.GetComponent<GrabInteractable>();
+            if (grab != null)
+            {
+                grab.InjectRigidbody(rb);
+                grab.InjectOptionalPointableElement(grabbable);
+            }
+        }
+#endif
+
+        /// <summary>Pop-up de finalização (escondido) com resumo e botões Reiniciar / Continuar explorando.</summary>
+        static void BuildCompletionPopup(Transform parent)
+        {
+            var popup = parent.gameObject.AddComponent<DaoCompletionPopup>();
+            var root = new GameObject("Popup Desafio Concluido");
+            root.transform.SetParent(parent, false);
+            popup.popupRoot = root;
+            popup.summaryText = MakeText(root.transform, "Resumo", "DESAFIO CONCLUÍDO!", new Vector3(0, 0.12f, 0), 0.0022f, Ink, Gold);
+            var green = new Color(0.25f, 0.8f, 0.45f);
+            var gray = new Color(0.6f, 0.62f, 0.7f);
+            var restart = MakePokeButton(root.transform, "Botao Reiniciar", new Vector3(-0.18f, -0.32f, 0), green, Quaternion.identity);
+            UnityEventTools.AddPersistentListener(restart.onPress, popup.Restart);
+            MakeText(root.transform, "Rotulo Reiniciar", "REINICIAR", new Vector3(-0.18f, -0.42f, 0), 0.0018f, Ink, green);
+            var close = MakePokeButton(root.transform, "Botao Continuar", new Vector3(0.18f, -0.32f, 0), gray, Quaternion.identity);
+            UnityEventTools.AddPersistentListener(close.onPress, popup.Hide);
+            MakeText(root.transform, "Rotulo Continuar", "CONTINUAR\nEXPLORANDO", new Vector3(0.18f, -0.44f, 0), 0.0016f, Ink, gray);
+            root.SetActive(false);
         }
 
         static T LoadByGuid<T>(string guid) where T : UnityEngine.Object
@@ -920,6 +1068,45 @@ namespace DAO.EditorTools
                 AssetDatabase.CreateAsset(m, path);
             }
             return m;
+        }
+
+        /// <summary>Material sem iluminação (painel branco e borda): sempre legível, mesmo em sala escura.</summary>
+        static Material UnlitMaterial(Color c, string prefix = "DAO_Unlit")
+        {
+            string path = $"{Root}/Materials/{prefix}_{ColorUtility.ToHtmlStringRGB(c)}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+            if (m == null) { m = new Material(shader); AssetDatabase.CreateAsset(m, path); }
+            m.shader = shader;
+            m.color = c;
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        static Material EmissiveMaterial(Color c) => UnlitMaterial(c, "DAO_Emissivo");
+
+        static GameObject PanelQuad(Transform parent, string name, Color c)
+        {
+            var q = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            q.name = name;
+            UnityEngine.Object.DestroyImmediate(q.GetComponent<Collider>());
+            q.transform.SetParent(parent, false);
+            var r = q.GetComponent<MeshRenderer>();
+            r.sharedMaterial = UnlitMaterial(c);
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return q;
+        }
+
+        /// <summary>Texto escuro sobre um painel branco com borda colorida (o painel se ajusta ao texto sozinho).</summary>
+        static DaoText MakeText(Transform parent, string name, string content, Vector3 localPos, float charSize, Color color, Color border)
+        {
+            var dt = MakeText(parent, name, content, localPos, charSize, color);
+            dt.panel = PanelQuad(dt.transform, "Painel", new Color(0.98f, 0.98f, 0.96f)).transform;
+            dt.panelBorder = PanelQuad(dt.transform, "Borda", border).transform;
+            dt.padding = new Vector2(0.04f, 0.03f) * (charSize / 0.0018f);
+            dt.FitPanel(true);
+            return dt;
         }
 
         static DaoText MakeText(Transform parent, string name, string content, Vector3 localPos, float charSize, Color color)

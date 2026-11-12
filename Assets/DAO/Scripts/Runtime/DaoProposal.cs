@@ -16,19 +16,30 @@ namespace DAO
         public UnityEvent onWin = new UnityEvent();
     }
 
-    public enum DaoSimulation
+    /// <summary>Como a DAO converte tokens de governança em votos.</summary>
+    public enum DaoVotingCurve
     {
-        [Tooltip("Os membros simulados empatam: o voto do visitante decide. Ótimo para demo.")]
-        Empate,
-        [Tooltip("Cada membro simulado vota aleatoriamente. Pode vencer a opção que o visitante NÃO escolheu.")]
-        Aleatorio,
-        [Tooltip("Só o visitante vota.")]
-        SemSimulacao
+        [Tooltip("votos = tokens. Cada token pesa igual.")]
+        Linear,
+        [Tooltip("votos = 2^tokens - 1. Quem acumula tokens ganha poder desproporcional (a 'baleia' manda).")]
+        Exponencial,
+        [Tooltip("votos = log2(tokens + 1). Cada token a mais vale menos: protege quem tem poucos tokens.")]
+        ExponencialInvertida
+    }
+
+    [Serializable]
+    public class DaoMember
+    {
+        public string name = "Membro";
+        [Min(0)] public int tokens = 1;
+        [Tooltip("Índice da opção em que este membro vota.")]
+        public int option;
     }
 
     /// <summary>
-    /// Uma proposta da DAO: o visitante vota (Poke), os membros simulados votam em seguida,
-    /// a contagem aparece no painel e a opção vencedora é executada automaticamente (como um smart contract).
+    /// Uma proposta da DAO: o visitante vota (Poke ou clique) com o poder de voto dos tokens da carteira,
+    /// os membros simulados votam em seguida, a contagem aparece no painel e a opção vencedora é executada
+    /// automaticamente (como um smart contract). Empate: vence a opção do visitante.
     /// </summary>
     public class DaoProposal : MonoBehaviour
     {
@@ -41,21 +52,19 @@ namespace DAO
             new DaoOption { label = "B", color = new Color(1f, 0.5f, 0.2f) },
         };
 
-        [Header("Membros simulados da DAO")]
-        public DaoSimulation simulation = DaoSimulation.Empate;
-        [Min(0)] public int simulatedMembers = 8;
-        [Tooltip("Peso base do voto do visitante (1 carteira = 1 voto).")]
-        [Min(1)] public int visitorWeight = 1;
-        [Tooltip("Soma os tokens da carteira (DaoLedger.Tokens) ao peso do voto: governança por token.")]
-        public bool useWalletTokens = true;
-        [Min(0f)] public float secondsPerSimulatedVote = 0.25f;
+        [Header("Governança")]
+        public DaoVotingCurve curve = DaoVotingCurve.Linear;
+        public List<DaoMember> members = new List<DaoMember>();
+        [Min(0f)] public float secondsPerMemberVote = 0.6f;
         [Tooltip("Se falso, cada carteira vota uma vez só (o voto é imutável). Use ResetProposal para reabrir.")]
         public bool allowRevote = false;
 
         [Header("Textos (opcional, objetos com DaoText)")]
         public DaoText titleText;
+        public DaoText curveText;
         public DaoText statusText;
         public DaoText tallyText;
+        public DaoText membersText;
 
         [Header("Eventos")]
         public UnityEvent<int> onVoteCast = new UnityEvent<int>();
@@ -65,15 +74,87 @@ namespace DAO
         public bool HasVoted { get; private set; }
         public bool Executed { get; private set; }
         public int Winner { get; private set; } = -1;
-        public int[] Tally => tally;
+        public float[] Tally => tally;
 
-        int[] tally;
+        float[] tally;
+        int membersCounted;
+        int visitorChoice = -1;
+        int visitorTokens;
         Coroutine counting;
+
+        // ---------- curvas ----------
+
+        public static float VotePower(DaoVotingCurve c, int tokens)
+        {
+            tokens = Mathf.Max(0, tokens);
+            switch (c)
+            {
+                case DaoVotingCurve.Exponencial: return Mathf.Pow(2f, tokens) - 1f;
+                case DaoVotingCurve.ExponencialInvertida: return Mathf.Log(tokens + 1f, 2f);
+                default: return tokens;
+            }
+        }
+
+        public float VotePower(int tokens) => VotePower(curve, tokens);
+
+        public static string CurveName(DaoVotingCurve c)
+        {
+            switch (c)
+            {
+                case DaoVotingCurve.Exponencial: return "DAO EXPONENCIAL";
+                case DaoVotingCurve.ExponencialInvertida: return "DAO EXPONENCIAL INVERTIDA (logarítmica)";
+                default: return "DAO LINEAR";
+            }
+        }
+
+        public static string CurveShortName(DaoVotingCurve c)
+        {
+            switch (c)
+            {
+                case DaoVotingCurve.Exponencial: return "exponencial";
+                case DaoVotingCurve.ExponencialInvertida: return "exponencial invertida";
+                default: return "linear";
+            }
+        }
+
+        public static string CurveFormula(DaoVotingCurve c)
+        {
+            switch (c)
+            {
+                case DaoVotingCurve.Exponencial: return "votos = 2^tokens - 1";
+                case DaoVotingCurve.ExponencialInvertida: return "votos = log2(tokens + 1)";
+                default: return "votos = tokens (1 token = 1 voto)";
+            }
+        }
+
+        public static string CurveExamples(DaoVotingCurve c)
+        {
+            var sb = new StringBuilder();
+            foreach (int t in new[] { 1, 3, 7, 15 })
+            {
+                if (sb.Length > 0) sb.Append("   ");
+                sb.Append(t).Append(" tk → ").Append(DaoLedger.FormatVotes(VotePower(c, t)));
+            }
+            return sb.ToString();
+        }
+
+        public static string CurveLesson(DaoVotingCurve c)
+        {
+            switch (c)
+            {
+                case DaoVotingCurve.Exponencial: return "Quem acumula tokens manda: a baleia decide sozinha.";
+                case DaoVotingCurve.ExponencialInvertida: return "Cada token a mais vale menos: muitos pequenos vencem a baleia.";
+                default: return "Todo token vale igual: poder proporcional ao que se tem.";
+            }
+        }
+
+        // ---------- ciclo ----------
 
         void Start()
         {
             ResetTally();
             RefreshTexts("Aperte um botão para votar.");
+            if (DaoLedger.Instance != null) DaoLedger.Instance.onTokensChanged.AddListener(_ => { if (!HasVoted) RefreshTexts(null); });
         }
 
         public void VoteA() => Vote(0);
@@ -86,7 +167,7 @@ namespace DAO
             if (counting != null) return;
             if (HasVoted && !allowRevote)
             {
-                RefreshTexts("Esta carteira já votou. O voto é imutável.");
+                RefreshTexts("Esta carteira já votou. O voto é imutável.\nReinicie o jogo para votar de novo.");
                 return;
             }
             if (Executed) ResetTally();
@@ -100,6 +181,7 @@ namespace DAO
             HasVoted = false;
             Executed = false;
             Winner = -1;
+            visitorChoice = -1;
             ResetTally();
             onReset.Invoke();
             RefreshTexts("Votação reaberta. Aperte um botão para votar.");
@@ -107,82 +189,100 @@ namespace DAO
 
         void ResetTally()
         {
-            tally = new int[options.Count];
+            tally = new float[options.Count];
+            membersCounted = 0;
         }
 
         IEnumerator Count(int choice)
         {
             HasVoted = true;
-            int weight = visitorWeight;
-            if (useWalletTokens && DaoLedger.Instance != null) weight += DaoLedger.Instance.Tokens;
-
-            tally[choice] += weight;
-            string tx = DaoLedger.Instance != null ? DaoLedger.Instance.RecordVote(this, choice, weight) : "";
+            visitorChoice = choice;
+            visitorTokens = DaoLedger.Instance != null ? DaoLedger.Instance.Tokens : 1;
+            float power = VotePower(visitorTokens);
+            tally[choice] += power;
+            string tx = DaoLedger.Instance != null ? DaoLedger.Instance.RecordVote(this, choice, visitorTokens, power) : "";
             onVoteCast.Invoke(choice);
-            RefreshTexts($"Seu voto em \"{options[choice].label}\" foi registrado (peso {weight}).\n{tx}");
+            RefreshTexts($"Seu voto em \"{options[choice].label}\": {visitorTokens} token(s) → {DaoLedger.FormatVotes(power)} voto(s).\n{tx}");
 
-            // Membros simulados chegando um a um, em ordem embaralhada.
-            var queue = BuildSimulatedVotes();
-            foreach (int v in queue)
+            // Membros votando um a um, para o visitante ver a curva agir.
+            for (int i = 0; i < members.Count; i++)
             {
-                if (secondsPerSimulatedVote > 0f) yield return new WaitForSeconds(secondsPerSimulatedVote);
-                tally[v]++;
-                RefreshTexts("Contando votos dos membros...");
+                if (secondsPerMemberVote > 0f) yield return new WaitForSeconds(secondsPerMemberVote);
+                var m = members[i];
+                if (m.option >= 0 && m.option < tally.Length) tally[m.option] += VotePower(m.tokens);
+                membersCounted = i + 1;
+                RefreshTexts($"{m.name} votou em \"{options[Mathf.Clamp(m.option, 0, options.Count - 1)].label}\" com {m.tokens} token(s).");
             }
-            if (secondsPerSimulatedVote > 0f) yield return new WaitForSeconds(0.5f);
+            if (secondsPerMemberVote > 0f) yield return new WaitForSeconds(0.6f);
 
-            // Vencedor: maior contagem; empate é decidido a favor do visitante.
-            int best = choice;
+            int best = choice; // empate: vence a opção do visitante
             for (int i = 0; i < tally.Length; i++)
-                if (tally[i] > tally[best]) best = i;
+                if (tally[i] > tally[best] + 1e-4f) best = i;
 
             Winner = best;
             Executed = true;
             counting = null;
-            RefreshTexts($"Aprovado: \"{options[best].label}\".\nO contrato executou sozinho, sem chefe.");
+            string verdict = best == choice
+                ? $"Aprovado: \"{options[best].label}\". Seu voto ajudou a decidir."
+                : $"Aprovado: \"{options[best].label}\". Você perdeu: {CurveLesson(curve)}";
+            RefreshTexts(verdict + "\nO contrato executou sozinho, sem chefe.");
 
             DaoLedger.Instance?.RecordExecution(this, best);
             options[best].onWin.Invoke();
             onExecuted.Invoke(best);
         }
 
-        List<int> BuildSimulatedVotes()
-        {
-            var votes = new List<int>();
-            int n = options.Count;
-            switch (simulation)
-            {
-                case DaoSimulation.Empate:
-                    int each = simulatedMembers / n;
-                    for (int o = 0; o < n; o++)
-                        for (int k = 0; k < each; k++) votes.Add(o);
-                    break;
-                case DaoSimulation.Aleatorio:
-                    for (int k = 0; k < simulatedMembers; k++) votes.Add(UnityEngine.Random.Range(0, n));
-                    break;
-            }
-            for (int i = votes.Count - 1; i > 0; i--)
-            {
-                int j = UnityEngine.Random.Range(0, i + 1);
-                (votes[i], votes[j]) = (votes[j], votes[i]);
-            }
-            return votes;
-        }
+        // ---------- textos ----------
 
         void RefreshTexts(string status)
         {
             DaoText.Set(titleText, $"{title}\n{description}");
-            DaoText.Set(statusText, status);
+            DaoText.Set(curveText, $"{CurveName(curve)}\n{CurveFormula(curve)}\n{CurveExamples(curve)}");
+            if (status != null) DaoText.Set(statusText, status);
+            else if (!HasVoted)
+            {
+                int t = DaoLedger.Instance != null ? DaoLedger.Instance.Tokens : 1;
+                DaoText.Set(statusText, $"Seu poder aqui: {t} token(s) → {DaoLedger.FormatVotes(VotePower(t))} voto(s).\nPegue moedas douradas para votar mais forte!");
+            }
+
             if (tallyText != null && tally != null)
             {
-                var sb = new StringBuilder();
+                float max = 1f;
+                foreach (var v in tally) max = Mathf.Max(max, v);
+                var sb = new StringBuilder("PLACAR\n");
                 for (int i = 0; i < options.Count; i++)
                 {
-                    if (i > 0) sb.Append("   x   ");
-                    sb.Append(options[i].label).Append(": ").Append(tally[i]);
+                    int bars = Mathf.RoundToInt(12f * tally[i] / max);
+                    sb.Append(options[i].label).Append("  ").Append(new string('■', bars)).Append(bars == 0 ? "·" : "")
+                      .Append("  ").Append(DaoLedger.FormatVotes(tally[i])).Append(" votos");
+                    if (i < options.Count - 1) sb.Append('\n');
                 }
                 tallyText.Set(sb.ToString());
             }
+
+            if (membersText != null)
+            {
+                var sb = new StringBuilder("MEMBROS DA DAO\n");
+                int t = HasVoted ? visitorTokens : (DaoLedger.Instance != null ? DaoLedger.Instance.Tokens : 1);
+                sb.Append(Line("Você", t, visitorChoice, HasVoted)).Append('\n');
+                for (int i = 0; i < members.Count; i++)
+                {
+                    var m = members[i];
+                    bool voted = HasVoted && i < membersCounted;
+                    sb.Append(Line(m.name, m.tokens, voted ? m.option : -1, voted));
+                    if (!voted && !HasVoted) sb.Append($"  (prefere {options[Mathf.Clamp(m.option, 0, options.Count - 1)].label})");
+                    sb.Append('\n');
+                }
+                membersText.Set(sb.ToString().TrimEnd('\n'));
+            }
+        }
+
+        string Line(string who, int tokens, int option, bool voted)
+        {
+            string dots = tokens <= 10 ? new string('●', tokens) : new string('●', 10) + "+";
+            string votes = DaoLedger.FormatVotes(VotePower(tokens));
+            string vote = voted && option >= 0 ? $"  | votou {options[option].label}" : "";
+            return $"{who}: {dots} {tokens} tk → {votes} voto(s){vote}";
         }
     }
 }

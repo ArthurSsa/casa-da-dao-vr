@@ -70,6 +70,15 @@ namespace DAO
             anim = StartCoroutine(Animate(c, 1f));
         }
 
+        /// <summary>Volta às cores originais na hora (reiniciar o jogo).</summary>
+        public void ResetTintInstant()
+        {
+            Cache();
+            if (anim != null) StopCoroutine(anim);
+            anim = null;
+            Write(currentTarget, 0f);
+        }
+
         public void ResetTint()
         {
             Cache();

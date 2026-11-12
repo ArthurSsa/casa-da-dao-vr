@@ -100,6 +100,43 @@ namespace DAO
         public void NextRoom() => GoToRoom((CurrentRoomIndex + 1) % rooms.Count);
         public void PreviousRoom() => GoToRoom((CurrentRoomIndex - 1 + rooms.Count) % rooms.Count);
 
+        [Header("Segurança")]
+        [Tooltip("Se o jogador ficar este tanto abaixo do piso da sala, volta para o spawn (nunca cai no vazio).")]
+        public float fallLimit = 1.5f;
+        public UnityEvent onRespawn = new UnityEvent();
+
+        void Update()
+        {
+            if (IsTransitioning || playerRig == null || CurrentRoom?.spawnPoint == null) return;
+            float floor = CurrentRoom.spawnPoint.position.y;
+            Vector3 p = head != null ? head.position : playerRig.position;
+            if (playerRig.position.y < floor - fallLimit || p.y < floor - fallLimit)
+            {
+                Debug.Log("[DAO] Jogador saiu do mapa; voltando ao spawn.");
+                StartCoroutine(RespawnRoutine(CurrentRoomIndex));
+            }
+        }
+
+        /// <summary>Volta para o spawn de uma sala, mesmo que seja a atual (usado no reinício e no anti-queda).</summary>
+        public void Respawn(int index)
+        {
+            if (IsTransitioning || index < 0 || index >= rooms.Count) return;
+            if (index != CurrentRoomIndex) GoToRoom(index);
+            else StartCoroutine(RespawnRoutine(index));
+        }
+
+        IEnumerator RespawnRoutine(int index)
+        {
+            IsTransitioning = true;
+            if (screenFade != null) yield return screenFade.FadeTo(1f, fadeDuration);
+            TeleportTo(rooms[index].spawnPoint);
+            onRespawn.Invoke();
+            yield return null;
+            yield return null;
+            if (screenFade != null) yield return screenFade.FadeTo(0f, fadeDuration);
+            IsTransitioning = false;
+        }
+
         IEnumerator Transition(int index)
         {
             IsTransitioning = true;

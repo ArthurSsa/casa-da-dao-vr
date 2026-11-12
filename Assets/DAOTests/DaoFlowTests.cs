@@ -92,12 +92,12 @@ public class DaoFlowTests
         yield return WaitUntil(() => p0.Executed, 10f, "proposta 1 executar");
         Assert.AreEqual(0, p0.Winner, "voto do visitante decide o empate");
         yield return new WaitForSeconds(scaler.duration + 0.3f);
-        Assert.AreEqual(scaler.tinyScale, mgr.playerRig.localScale.x, 0.01f, "jogador encolheu");
+        Assert.AreEqual(scaler.tinyScale, scaler.CurrentScale, 0.01f, "sala cresceu (jogador parece minúsculo)"); Assert.AreEqual(1f, mgr.playerRig.localScale.x, 0.001f, "o rig do jogador não é escalado");
         Assert.AreEqual(2, ledger.Entries.Count, "voto + execução no livro-razão");
 
         // Porta da sala -> Cozinha (ficando na luz do portal).
         yield return StandInPortal(mgr, 0, 1);
-        Assert.AreEqual(1f, mgr.playerRig.localScale.x, 0.001f, "escala volta ao normal ao sair");
+        Assert.AreEqual(1f, mgr.rooms[0].root.transform.localScale.x, 0.001f, "sala volta ao tamanho normal ao sair");
         Assert.Less(HeadDistXZ(mgr, mgr.rooms[1].spawnPoint), 0.6f, "cabeça perto do spawn da cozinha (a cápsula da Meta desvia de móveis)");
         Assert.IsFalse(mgr.rooms[0].root.activeSelf);
         Assert.AreEqual(0f, UnityEngine.Object.FindFirstObjectByType<DaoScreenFade>().Alpha, 0.01f, "fade terminou");
@@ -109,7 +109,7 @@ public class DaoFlowTests
         var probe = props.First(rb => rb.name.StartsWith("Pan") || rb.name.StartsWith("Pot"));
         float y0 = probe.position.y;
         var p1 = mgr.rooms[1].proposal;
-        p1.Vote(0);
+        ledger.AddTokens(6); p1.Vote(0);
         yield return WaitUntil(() => p1.Executed, 10f, "proposta 2 executar");
         Assert.AreEqual(Vector3.zero, Physics.gravity);
         yield return new WaitForSeconds(1f);
@@ -129,12 +129,17 @@ public class DaoFlowTests
         Assert.Less(Vector4.Distance(tint.lights[0].color, tint.palette[1]), 0.02f, "luz ficou azul");
 
         Assert.AreEqual(3, ledger.ExecutedCount);
-        var done = mgr.head.GetComponentsInChildren<Transform>(true).First(t => t.name.StartsWith("Desafio Concluido"));
-        Assert.IsTrue(done.gameObject.activeSelf, "tela de conclusão");
+        var popup = UnityEngine.Object.FindFirstObjectByType<DaoCompletionPopup>();
+        Assert.IsTrue(popup.popupRoot.activeSelf, "pop-up de conclusão");
 
         // Escada do sótão -> Sala (fecha o ciclo).
         yield return StandInPortal(mgr, 2, 0);
         Assert.Less(HeadDistXZ(mgr, mgr.rooms[0].spawnPoint), 0.6f, "de volta à sala");
+        popup.Restart();
+        yield return new WaitForSeconds(1.5f);
+        Assert.AreEqual(0, ledger.ExecutedCount, "reinício zera o livro-razão");
+        Assert.AreEqual(1, ledger.Tokens, "reinício volta a 1 token");
+        Assert.IsFalse(mgr.rooms[0].proposal.HasVoted, "pode votar de novo");
         DaoDesktopMode.AllowAuto = true;
         UnityEngine.Object.Destroy(shim.gameObject);
     }
@@ -161,10 +166,10 @@ public class DaoFlowTests
         var btnA = p0.GetComponentsInChildren<DaoButton>(true).First(b => b.name.StartsWith("Botao A"));
         Assert.NotNull(btnA.GetComponentInChildren<Collider>(), "botão ganhou collider para o mouse");
         var cam = desktop.DesktopCamera;
-        Vector3 target = btnA.GetComponentInChildren<Collider>().bounds.center;
+        var bb = btnA.GetComponentInChildren<Collider>().bounds; Vector3 target = new Vector3(bb.center.x, bb.max.y - 0.005f, bb.center.z); // topo visível do botão
         Assert.IsTrue(Physics.Raycast(cam.transform.position, target - cam.transform.position, out var hit, 6f));
         var hitButton = hit.collider.GetComponentInParent<DaoButton>();
-        Assert.AreEqual(btnA, hitButton, "nada bloqueia o botão A a partir da câmera");
+        Assert.AreEqual(btnA, hitButton, "nada bloqueia o botão A a partir da câmera; acertou: " + hit.collider.name + " / " + hit.collider.transform.parent?.name);
         hitButton.Press();
         yield return WaitUntil(() => p0.Executed, 10f, "voto pelo clique");
 

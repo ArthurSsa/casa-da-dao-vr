@@ -71,9 +71,9 @@ namespace DAO
             if (head != null && Time.time >= armedAt && (mgr == null || !mgr.IsTransitioning))
             {
                 Vector3 local = head.position - transform.position;
-                float rigScale = mgr != null && mgr.playerRig != null ? mgr.playerRig.lossyScale.y : 1f;
-                inside = new Vector2(local.x, local.z).magnitude <= radius
-                         && local.y >= -0.2f && local.y <= height * Mathf.Max(1f, rigScale);
+                float s = transform.lossyScale.x; // a sala pode estar escalada (minúsculo/gigante)
+                inside = new Vector2(local.x, local.z).magnitude <= radius * s
+                         && local.y >= -0.2f && local.y <= Mathf.Max(height * s, 2.4f);
             }
 
             if (inside != PlayerInside)
