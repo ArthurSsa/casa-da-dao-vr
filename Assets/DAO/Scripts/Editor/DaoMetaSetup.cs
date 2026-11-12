@@ -62,6 +62,7 @@ namespace DAO.EditorTools
                 if (pending.Count == 0)
                 {
                     EditorApplication.update -= tick;
+                    DisableOnTilePostProcess();
                     AssetDatabase.SaveAssets();
                     onDone?.Invoke();
                     return;
@@ -251,6 +252,24 @@ namespace DAO.EditorTools
             }
             QualitySettings.SetQualityLevel(current, false);
             Debug.Log("[DAO-SETUP] URP ativo (MSAA 4x, sem HDR, sem sombras).");
+        }
+
+        /// <summary>
+        /// O Fix All da Meta liga o "On-Tile post processing" do URP. Ele só funciona no Quest (Vulkan) e, no editor
+        /// do PC, gera um erro por quadro. Como o projeto não usa pós-processamento, fica desligado.
+        /// </summary>
+        static void DisableOnTilePostProcess()
+        {
+            var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(SettingsDir + "/DAO_URP_Renderer.asset");
+            if (renderer == null) return;
+            foreach (var f in renderer.rendererFeatures)
+                if (f != null && f.GetType().Name == "OnTilePostProcessFeature" && f.isActive)
+                {
+                    f.SetActive(false);
+                    EditorUtility.SetDirty(f);
+                    Debug.Log("[DAO-SETUP] On-Tile post processing desligado (gerava erro no editor do PC).");
+                }
+            EditorUtility.SetDirty(renderer);
         }
 
         static void SetBool(SerializedObject so, string prop, bool v) { var p = so.FindProperty(prop); if (p != null) p.boolValue = v; }
