@@ -175,6 +175,12 @@ namespace DAO.EditorTools
             rooms = new List<Built>();
             for (int i = 0; i < Defs.Length; i++) rooms.Add(BuildRoom(i, Defs[i]));
 
+            systems.AddComponent<DaoJump>();
+            popupsParent = new GameObject("Popups").transform;
+            popupsParent.SetParent(systems.transform, false);
+            var map = BuildMapMenu(Defs.Select(d => d.name).ToArray());
+            BuildHud(head, systems, out var hudTally, out var hudStatus);
+
             // Portas, moedas, votação e painéis (precisam conhecer todas as salas).
             var ledgerTexts = new List<DaoText>();
             for (int i = 0; i < rooms.Count; i++)
@@ -182,14 +188,17 @@ namespace DAO.EditorTools
                 var b = rooms[i];
                 BuildPortal(b, rooms[b.def.exitTo].def.name);
                 BuildTokens(b, 3);
-                b.proposal = BuildVoteStation(b, ledgerTexts);
+                b.proposal = BuildVoteStation(b, ledgerTexts, map, hudTally, hudStatus, out var info);
                 WireEffect(b, scaler);
 #if DAO_HAS_META
                 foreach (var rb in b.root.GetComponentsInChildren<Rigidbody>()) MakeGrabbable(rb);
 #endif
 
-                mgr.rooms.Add(new DaoRoom { name = b.def.name, root = b.root, spawnPoint = b.spawn, proposal = b.proposal });
+                mgr.rooms.Add(new DaoRoom { name = b.def.name, root = b.root, spawnPoint = b.spawn, proposal = b.proposal, infoPopup = info });
                 var room = mgr.rooms[i];
+                UnityEventTools.AddPersistentListener(room.onEnter, info.Show); // explicações cobrem a visão ao entrar
+                UnityEventTools.AddPersistentListener(room.onExit, info.Hide);
+                UnityEventTools.AddPersistentListener(room.onExit, map.Hide);
                 UnityEventTools.AddPersistentListener(room.onExit, scaler.ResetScaleInstant);
                 var grav = b.root.GetComponent<DaoGravity>();
                 if (grav != null) UnityEventTools.AddPersistentListener(room.onExit, grav.Restore);
@@ -426,14 +435,14 @@ namespace DAO.EditorTools
             return t;
         }
 
-        static DaoProposal BuildVoteStation(Built b, List<DaoText> ledgerTexts)
+        static DaoProposal BuildVoteStation(Built b, List<DaoText> ledgerTexts, DaoMapMenu map, DaoText hudTally, DaoText hudStatus, out DaoPanelPopup info)
         {
             var st = new GameObject("Estacao de Votacao").transform;
             st.SetParent(b.spawn, false);
             st.localPosition = new Vector3(0, 0, 1.1f);
 
             // Palanque com colisão (não dá para atravessar).
-            Cube(st, "Pedestal", new Vector3(0, 0.45f, 0), new Vector3(0.9f, 0.9f, 0.4f), new Color(0.12f, 0.12f, 0.2f));
+            Cube(st, "Pedestal", new Vector3(0, 0.45f, 0), new Vector3(1.05f, 0.9f, 0.4f), new Color(0.12f, 0.12f, 0.2f));
 
             var proposal = st.gameObject.AddComponent<DaoProposal>();
             proposal.title = b.def.proposalTitle;
@@ -445,26 +454,29 @@ namespace DAO.EditorTools
                 new DaoOption { label = b.def.optA, color = b.def.colA },
                 new DaoOption { label = b.def.optB, color = b.def.colB },
             };
-            proposal.titleText = MakeText(st, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 2.05f, 0.1f), 0.0026f, Ink, new Color(0.25f, 0.45f, 0.9f));
-            proposal.curveText = MakeText(st, "Curva", DaoProposal.CurveName(b.def.curve), new Vector3(0, 1.78f, 0.1f), 0.0019f, Ink, Gold);
-            proposal.tallyText = MakeText(st, "Placar", "PLACAR", new Vector3(0, 1.52f, 0.1f), 0.0021f, Ink, new Color(0.2f, 0.6f, 0.35f));
-            proposal.statusText = MakeText(st, "Status", "Aperte um botão para votar.", new Vector3(0, 1.27f, 0.1f), 0.0016f, Ink, new Color(0.5f, 0.5f, 0.55f));
+            // Placar e status vão para o HUD (canto da visão); o resto vai para o pop-up de informações da sala.
+            proposal.tallyText = hudTally;
+            proposal.statusText = hudStatus;
 
+            // Palanque só com botões: A, B, INFO e MAPAS.
+            var green = new Color(0.25f, 0.8f, 0.45f);
+            var gray = new Color(0.6f, 0.62f, 0.7f);
+            float[] xs = { -0.39f, -0.13f, 0.13f, 0.39f };
             for (int k = 0; k < 2; k++)
             {
                 var opt = proposal.options[k];
-                var db = MakePokeButton(st, "Botao " + (k == 0 ? "A" : "B") + " - " + opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 0.92f, 0), opt.color, Quaternion.Euler(90f, 0f, 0f));
+                var db = MakePokeButton(st, "Botao " + (k == 0 ? "A" : "B") + " - " + opt.label, new Vector3(xs[k], 0.92f, 0), opt.color, Quaternion.Euler(90f, 0f, 0f));
                 UnityEventTools.AddIntPersistentListener(db.onPress, proposal.Vote, k);
-                MakeText(st, "Rotulo " + k, (k == 0 ? "A: " : "B: ") + opt.label, new Vector3(k == 0 ? -0.22f : 0.22f, 1.06f, 0.05f), 0.0017f, Ink, opt.color);
+                MakeText(st, "Rotulo " + k, (k == 0 ? "A: " : "B: ") + opt.label, new Vector3(xs[k], 1.07f, 0.05f), 0.0014f, Ink, opt.color);
             }
 
-            // Membros (esquerda), carteira (direita) e livro-razão (mais à esquerda), todos virados para o spawn.
-            proposal.membersText = MakeText(PanelFacingSpawn(b, "Painel Membros", new Vector3(-1.05f, 1.45f, 1.0f)), "Membros", "MEMBROS DA DAO", Vector3.zero, 0.0016f, Ink, new Color(0.25f, 0.45f, 0.9f));
-            var wallet = PanelFacingSpawn(b, "Painel Carteira", new Vector3(1.05f, 1.45f, 1.0f)).gameObject.AddComponent<DaoWalletPanel>();
-            wallet.proposal = proposal;
-            wallet.text = MakeText(wallet.transform, "Carteira", "SUA CARTEIRA", Vector3.zero, 0.0016f, Ink, Gold);
-            wallet.roomTokens = b.tokens;
-            ledgerTexts.Add(MakeText(PanelFacingSpawn(b, "Painel Livro-Razao", new Vector3(-1.7f, 1.55f, 0.1f)), "Livro-Razao", "LIVRO-RAZÃO DA DAO", Vector3.zero, 0.0015f, Ink, new Color(0.2f, 0.6f, 0.35f)));
+            info = BuildInfoPopup(b, proposal, map, ledgerTexts);
+            var infoBtn = MakePokeButton(st, "Botao INFO", new Vector3(xs[2], 0.92f, 0), green, Quaternion.Euler(90f, 0f, 0f));
+            UnityEventTools.AddPersistentListener(infoBtn.onPress, info.Show);
+            MakeText(st, "Rotulo INFO", "INFO", new Vector3(xs[2], 1.07f, 0.05f), 0.0014f, Ink, green);
+            var mapBtn = MakePokeButton(st, "Botao MAPAS", new Vector3(xs[3], 0.92f, 0), gray, Quaternion.Euler(90f, 0f, 0f));
+            UnityEventTools.AddPersistentListener(mapBtn.onPress, map.Show);
+            MakeText(st, "Rotulo MAPAS", "MAPAS", new Vector3(xs[3], 1.07f, 0.05f), 0.0014f, Ink, gray);
             return proposal;
         }
 
@@ -756,7 +768,8 @@ namespace DAO.EditorTools
                     UnityEventTools.AddPersistentListener(p.options[0].onWin, scaler.Shrink);
                     UnityEventTools.AddPersistentListener(p.options[1].onWin, scaler.Grow);
                     float height = b.bounds.size.y;
-                    scaler.giantScale = Mathf.Clamp((height - 0.4f) / 1.6f, 1.2f, 3f);
+                    // Gigante moderado: com 1,5x o teto continua acima da cabeça e dá para andar pela sala.
+                    scaler.giantScale = Mathf.Clamp((height - 0.4f) / 1.6f, 1.2f, 1.5f);
                     Debug.Log($"[DAO-BUILD] {b.def.name}: pé-direito {height:F2} m -> giantScale {scaler.giantScale:F2}");
                     break;
                 case Effect.Tint:
@@ -924,6 +937,104 @@ namespace DAO.EditorTools
             }
         }
 #endif
+
+        static readonly Color Blue = new Color(0.25f, 0.45f, 0.9f);
+        static readonly Color Green = new Color(0.25f, 0.8f, 0.45f);
+        static readonly Color Gray = new Color(0.6f, 0.62f, 0.7f);
+        static Transform popupsParent;
+
+        /// <summary>
+        /// Pop-up grande de cada sala (abre ao entrar, cobre a visão): proposta, curva de governança, membros,
+        /// carteira, livro-razão e como jogar. Fica fora da sala (não é escalado no minúsculo/gigante).
+        /// </summary>
+        static DaoPanelPopup BuildInfoPopup(Built b, DaoProposal proposal, DaoMapMenu map, List<DaoText> ledgerTexts)
+        {
+            var holder = new GameObject("Popup Informacoes - " + b.def.name).transform;
+            holder.SetParent(popupsParent, false);
+            var popup = holder.gameObject.AddComponent<DaoPanelPopup>();
+            var root = new GameObject("Conteudo");
+            root.transform.SetParent(holder, false);
+            popup.root = root;
+
+            var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
+            bg.transform.localPosition = new Vector3(0, 0, 0.06f);
+            bg.transform.localScale = new Vector3(2.5f, 1.95f, 1f);
+            var frame = PanelQuad(root.transform, "Moldura", Blue);
+            frame.transform.localPosition = new Vector3(0, 0, 0.065f);
+            frame.transform.localScale = new Vector3(2.54f, 1.99f, 1f);
+
+            proposal.titleText = MakeText(root.transform, "Titulo", proposal.title + "\n" + proposal.description, new Vector3(0, 0.8f, 0), 0.0021f, Ink, Blue);
+            proposal.curveText = MakeText(root.transform, "Curva", DaoProposal.CurveName(proposal.curve), new Vector3(0, 0.52f, 0), 0.0015f, Ink, Gold);
+            proposal.membersText = MakeText(root.transform, "Membros", "MEMBROS DA DAO", new Vector3(-0.6f, 0.13f, 0), 0.0012f, Ink, Blue);
+            var wallet = holder.gameObject.AddComponent<DaoWalletPanel>();
+            wallet.proposal = proposal;
+            wallet.roomTokens = b.tokens;
+            wallet.text = MakeText(root.transform, "Carteira", "SUA CARTEIRA", new Vector3(0.6f, 0.1f, 0), 0.0012f, Ink, Gold);
+            ledgerTexts.Add(MakeText(root.transform, "Livro-Razao", "LIVRO-RAZÃO DA DAO", new Vector3(-0.6f, -0.43f, 0), 0.0011f, Ink, Green));
+            MakeText(root.transform, "Como jogar",
+                "COMO JOGAR\n" +
+                "Vote no palanque: botão A ou B (toque ou clique).\n" +
+                "Moedas douradas: chegue perto ou clique = +1 token.\n" +
+                "Pare na luz verde da porta/escada para trocar de sala.\n" +
+                "INFO reabre este painel · MAPAS vai direto a outra sala.\n" +
+                "Pular: botão A do controle ou Espaço.\n" +
+                "Teclado: WASD anda · botão direito + mouse olha",
+                new Vector3(0.6f, -0.43f, 0), 0.0011f, Ink, Gray);
+
+            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(-0.16f, -0.8f, 0), Green, Quaternion.identity);
+            UnityEventTools.AddPersistentListener(close.onPress, popup.Hide);
+            MakeText(root.transform, "Rotulo Fechar", "FECHAR E JOGAR", new Vector3(-0.16f, -0.9f, 0), 0.0013f, Ink, Green);
+            var maps = MakePokeButton(root.transform, "Botao Mapas", new Vector3(0.16f, -0.8f, 0), Gray, Quaternion.identity);
+            UnityEventTools.AddPersistentListener(maps.onPress, map.Show);
+            MakeText(root.transform, "Rotulo Mapas", "MAPAS", new Vector3(0.16f, -0.9f, 0), 0.0013f, Ink, Gray);
+            root.SetActive(false);
+            return popup;
+        }
+
+        /// <summary>Menu de mapas: um botão por sala para ir direto (e FECHAR).</summary>
+        static DaoMapMenu BuildMapMenu(string[] roomNames)
+        {
+            var holder = new GameObject("Popup Mapas").transform;
+            holder.SetParent(popupsParent, false);
+            var popup = holder.gameObject.AddComponent<DaoPanelPopup>();
+            popup.distance = 1.0f;
+            var menu = holder.gameObject.AddComponent<DaoMapMenu>();
+            menu.popup = popup;
+            var root = new GameObject("Conteudo");
+            root.transform.SetParent(holder, false);
+            popup.root = root;
+            var bg = PanelQuad(root.transform, "Fundo", new Color(0.9f, 0.92f, 0.96f));
+            bg.transform.localPosition = new Vector3(0, 0, 0.06f);
+            bg.transform.localScale = new Vector3(1.5f, 0.95f, 1f);
+            MakeText(root.transform, "Titulo", "MAPAS\nEscolha uma sala para ir direto", new Vector3(0, 0.3f, 0), 0.0018f, Ink, Gray);
+            for (int i = 0; i < roomNames.Length; i++)
+            {
+                float x = (i - (roomNames.Length - 1) * 0.5f) * 0.45f;
+                var color = i == 0 ? new Color(0.25f, 0.6f, 1f) : i == 1 ? new Color(0.6f, 0.3f, 1f) : new Color(1f, 0.6f, 0.25f);
+                var btn = MakePokeButton(root.transform, "Ir para " + roomNames[i], new Vector3(x, 0.02f, 0), color, Quaternion.identity);
+                UnityEventTools.AddIntPersistentListener(btn.onPress, menu.Go, i);
+                MakeText(root.transform, "Rotulo " + i, $"{i + 1}. {roomNames[i]}", new Vector3(x, -0.09f, 0), 0.0014f, Ink, color);
+            }
+            var close = MakePokeButton(root.transform, "Botao Fechar", new Vector3(0, -0.28f, 0), Gray, Quaternion.identity);
+            UnityEventTools.AddPersistentListener(close.onPress, menu.Hide);
+            MakeText(root.transform, "Rotulo Fechar", "FECHAR", new Vector3(0, -0.38f, 0), 0.0013f, Ink, Gray);
+            root.SetActive(false);
+            return menu;
+        }
+
+        /// <summary>HUD pequeno preso à cabeça, no canto inferior direito: carteira, placar e status.</summary>
+        static void BuildHud(Transform head, GameObject systems, out DaoText tally, out DaoText status)
+        {
+            var hudRoot = new GameObject("HUD (canto da visao)").transform;
+            hudRoot.SetParent(head, false);
+            hudRoot.localPosition = new Vector3(0.27f, -0.19f, 0.75f);
+            var hud = systems.AddComponent<DaoHud>();
+            hud.walletText = MakeText(hudRoot, "HUD Carteira", "Tokens", new Vector3(0, 0.075f, 0), 0.00075f, Ink, Gold);
+            tally = MakeText(hudRoot, "HUD Placar", "PLACAR", new Vector3(0, 0f, 0), 0.00075f, Ink, Green);
+            status = MakeText(hudRoot, "HUD Status", "", new Vector3(0, -0.085f, 0), 0.0007f, Ink, Gray);
+            hud.tallyText = tally;
+            hud.statusText = status;
+        }
 
         /// <summary>Pop-up de finalização (escondido) com resumo e botões Reiniciar / Continuar explorando.</summary>
         static void BuildCompletionPopup(Transform parent)

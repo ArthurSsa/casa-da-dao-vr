@@ -19,6 +19,8 @@ namespace DAO
         public Transform spawnPoint;
         [Tooltip("Proposta de votação desta sala (opcional, usada pelas teclas de debug).")]
         public DaoProposal proposal;
+        [Tooltip("Pop-up com as explicações da sala (abre ao entrar; botão INFO reabre).")]
+        public DaoPanelPopup infoPopup;
         public UnityEvent onEnter = new UnityEvent();
         [Tooltip("Bom lugar para desfazer efeitos (ex.: DaoPlayerScale.ResetScaleInstant, DaoGravity.Restore).")]
         public UnityEvent onExit = new UnityEvent();

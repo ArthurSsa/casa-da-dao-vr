@@ -11,7 +11,8 @@ namespace DAO
     /// </summary>
     public class DaoDebugKeys : MonoBehaviour
     {
-        public bool onlyInEditor = true;
+        [Tooltip("Desligado: os atalhos também funcionam no build de PC (modo desktop).")]
+        public bool onlyInEditor = false;
 
         void Update()
         {
@@ -31,6 +32,8 @@ namespace DAO
                 if (Pressed(KeyCode.R)) p.ResetProposal();
             }
             if (Pressed(KeyCode.T) && DaoLedger.Instance != null) DaoLedger.Instance.AddToken();
+            if (Pressed(KeyCode.M)) FindFirstObjectByType<DaoMapMenu>()?.Toggle();
+            if (Pressed(KeyCode.I)) mgr.CurrentRoom?.infoPopup?.Toggle();
             if (Pressed(KeyCode.Alpha0))
             {
                 var s = FindFirstObjectByType<DaoPlayerScale>();
@@ -54,6 +57,8 @@ namespace DAO
                 case KeyCode.X: key = Key.X; break;
                 case KeyCode.R: key = Key.R; break;
                 case KeyCode.T: key = Key.T; break;
+                case KeyCode.M: key = Key.M; break;
+                case KeyCode.I: key = Key.I; break;
                 default: return false;
             }
             return kb[key].wasPressedThisFrame;

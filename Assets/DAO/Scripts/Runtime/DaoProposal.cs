@@ -234,15 +234,25 @@ namespace DAO
 
         // ---------- textos ----------
 
+        string lastStatus;
+
+        /// <summary>Reescreve todos os textos (o HUD é compartilhado entre as salas).</summary>
+        public void Refresh()
+        {
+            if (tally == null) ResetTally();
+            RefreshTexts(HasVoted ? lastStatus : null);
+        }
+
         void RefreshTexts(string status)
         {
+            if (status != null) lastStatus = status;
             DaoText.Set(titleText, $"{title}\n{description}");
             DaoText.Set(curveText, $"{CurveName(curve)}\n{CurveFormula(curve)}\n{CurveExamples(curve)}");
             if (status != null) DaoText.Set(statusText, status);
             else if (!HasVoted)
             {
                 int t = DaoLedger.Instance != null ? DaoLedger.Instance.Tokens : 1;
-                DaoText.Set(statusText, $"Seu poder aqui: {t} token(s) → {DaoLedger.FormatVotes(VotePower(t))} voto(s).\nPegue moedas douradas para votar mais forte!");
+                DaoText.Set(statusText, "Vote no palanque (A ou B). Pegue moedas douradas para votar mais forte!");
             }
 
             if (tallyText != null && tally != null)
@@ -252,7 +262,7 @@ namespace DAO
                 var sb = new StringBuilder("PLACAR\n");
                 for (int i = 0; i < options.Count; i++)
                 {
-                    int bars = Mathf.RoundToInt(12f * tally[i] / max);
+                    int bars = Mathf.RoundToInt(8f * tally[i] / max);
                     sb.Append(options[i].label).Append("  ").Append(new string('■', bars)).Append(bars == 0 ? "·" : "")
                       .Append("  ").Append(DaoLedger.FormatVotes(tally[i])).Append(" votos");
                     if (i < options.Count - 1) sb.Append('\n');

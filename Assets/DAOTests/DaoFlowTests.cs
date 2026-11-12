@@ -161,6 +161,11 @@ public class DaoFlowTests
         Assert.IsFalse(UnityEngine.Object.FindFirstObjectByType<OVRCameraRig>(), "rig VR desligado");
         Assert.AreEqual(mgr.rooms[0].spawnPoint.position.y + 1.6f, mgr.head.position.y, 0.05f, "olhos a 1,6 m do piso");
 
+        // O pop-up de informações abre ao entrar; o jogador fecha para jogar.
+        Assert.IsTrue(mgr.rooms[0].infoPopup.IsOpen, "pop-up de informações abre ao entrar na sala");
+        mgr.rooms[0].infoPopup.Hide();
+        yield return null;
+
         // Mira no botão A e "clica": o raio da câmera tem que acertar o DaoButton.
         var p0 = mgr.rooms[0].proposal;
         var btnA = p0.GetComponentsInChildren<DaoButton>(true).First(b => b.name.StartsWith("Botao A"));

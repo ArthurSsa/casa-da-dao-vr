@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 #if ENABLE_INPUT_SYSTEM && DAO_HAS_INPUTSYSTEM
 using UnityEngine.InputSystem;
@@ -25,7 +25,8 @@ namespace DAO
         public float moveSpeed = 1.8f;
         public float lookSpeed = 2.5f;
         public float bodyRadius = 0.25f;
-        public bool showHelp = true;
+        public bool showHelp = false;
+        public float jumpSpeed = 4.2f;
 
         public bool Active { get; private set; }
         public Transform DesktopRig => rig;
@@ -106,7 +107,7 @@ namespace DAO
                     for (int i = oldHead.childCount - 1; i >= 0; i--)
                     {
                         var child = oldHead.GetChild(i);
-                        if (child.name.StartsWith("Desafio")) child.SetParent(cam.transform, false);
+                        if (child.name.StartsWith("Desafio") || child.name.StartsWith("HUD")) child.SetParent(cam.transform, false);
                     }
                 xrRig.SetActive(false);
             }
@@ -172,7 +173,9 @@ namespace DAO
                 float speed = moveSpeed * (RunHeld() ? 2f : 1f);
                 Vector3 dir = rig.forward * m.y + rig.right * m.x;
                 if (dir.sqrMagnitude > 1f) dir.Normalize();
-                verticalSpeed = body.isGrounded ? -1f : Mathf.Max(verticalSpeed - 9.81f * Time.deltaTime, -20f);
+                if (body.isGrounded && verticalSpeed < 0f) verticalSpeed = -1f;
+                else verticalSpeed = Mathf.Max(verticalSpeed - 9.81f * Time.deltaTime, -20f);
+                if (KeyDown(KeyCode.Space)) Jump();
                 if (body.enabled) body.Move((dir * speed + Vector3.up * verticalSpeed) * Time.deltaTime);
             }
 
@@ -236,6 +239,12 @@ namespace DAO
             held = null;
         }
 
+        /// <summary>Pula se estiver no chão (Espaço).</summary>
+        public void Jump()
+        {
+            if (body != null && body.isGrounded) verticalSpeed = jumpSpeed;
+        }
+
         void Toast(string msg) { lastMessage = msg; lastMessageTime = Time.time; }
 
         void OnGUI()
@@ -247,24 +256,13 @@ namespace DAO
             var mgr = DaoRoomManager.Instance;
             string room = mgr != null && mgr.CurrentRoom != null ? mgr.CurrentRoom.name : "-";
 
-            // Carteira (canto superior direito)
-            var ledger = DaoLedger.Instance;
-            var p = mgr != null && mgr.CurrentRoom != null ? mgr.CurrentRoom.proposal : null;
-            if (ledger != null)
-            {
-                string power = p != null ? $"{DaoLedger.FormatVotes(p.VotePower(ledger.Tokens))} voto(s) ({DaoProposal.CurveShortName(p.curve)})" : "-";
-                string w = $"CARTEIRA: {ledger.Tokens} token(s)\nPoder de voto aqui: {power}\nPegue as moedas douradas para votar mais forte";
-                GUI.Box(new Rect(Screen.width - 340, 10, 330, 64), GUIContent.none);
-                GUI.Label(new Rect(Screen.width - 332, 14, 320, 60), w);
-            }
-
             if (Time.time - lastMessageTime < 2.5f) GUI.Label(new Rect(18, showHelp ? 100 : 14, 630, 22), lastMessage);
             if (!showHelp) return;
             string text =
                 $"MODO DESKTOP (sem óculos) · Sala: {room}\n" +
                 "WASD/setas: andar · Shift: correr · botão direito + mouse: olhar\n" +
-                "Clique: votar/pegar moeda · Segure o clique num objeto: carregar (roda: distância) · Z/X: votar\n" +
-                "Fique no círculo de luz verde (porta, arco, escada) para trocar de sala · 1/2/3: salas · H: ajuda";
+                "Clique: votar/pegar moeda · Segure o clique num objeto: carregar (roda: distância) · Espaço: pular\n" +
+                "Luz verde (porta, arco, escada): trocar de sala · M: mapas · I: informações · H: esconder ajuda";
             GUI.Box(new Rect(10, 10, 640, 84), GUIContent.none);
             GUI.Label(new Rect(18, 14, 630, 80), text);
         }
@@ -289,6 +287,7 @@ namespace DAO
             if (k == null) return false;
             if (code == KeyCode.H) return k.hKey.wasPressedThisFrame;
             if (code == KeyCode.F1) return k.f1Key.wasPressedThisFrame;
+            if (code == KeyCode.Space) return k.spaceKey.wasPressedThisFrame;
             return false;
         }
         static Vector2 MoveInput()
